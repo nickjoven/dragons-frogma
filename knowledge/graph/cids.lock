@@ -8,6 +8,7 @@
 {"content_cid": "e4f7a4370df401a0c108276150fe502e5bc5c30f6abc152c0913e6f0d29890c1", "domain_kind": "question", "id": "Q-0001", "node_kind": "task", "parents": ["ADR-0002", "client.re-engine-single-threaded-scripting"]}
 {"content_cid": "add12822a8885e83802235be7b924589d0c303e5858b192768f0c7443380ea47", "domain_kind": "question", "id": "Q-0002", "node_kind": "task", "parents": ["ADR-0003"]}
 {"content_cid": "9b632bd57b6f437f0488afb2cd4bfe0fe7538baee157be67e6f7422b8766d6f5", "domain_kind": "question", "id": "Q-0003", "node_kind": "task", "parents": ["ADR-0003", "client.re-engine-single-threaded-scripting"]}
+{"content_cid": "e76f6c4198c60f5d81027b6247cd49fd72d29614b10eca641ed8fd1ed74df4f7", "domain_kind": "question", "id": "Q-0004", "node_kind": "task", "parents": ["ADR-0002", "Q-0001", "client.reframework-dependency", "client.re-engine-single-threaded-scripting"]}
 {"content_cid": "4e16d57586919a9bfb06abad9f9e73087bb689daa64437c45091dd07a44a1857", "domain_kind": "constraint", "id": "client.dont-re-capcom-netcode", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001"]}
 {"content_cid": "8eaf8ec18e73d8fb0baa708b91f75e6efc84c9129fbe67f911e6136dd9208f7a", "domain_kind": "constraint", "id": "client.no-asset-redistribution", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001"]}
 {"content_cid": "16efd0b1737f0aa0f8f3ce481346c7e9498ec997fb34c0b31d1c9d08fcb6de27", "domain_kind": "constraint", "id": "client.no-game-state-writes", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001", "ADR-0003"]}
@@ -15,8 +16,11 @@
 {"content_cid": "edd0ed52e00bd8c735b605413de8ca1b3f9387d50f0d6763af512d9563cbed8a", "domain_kind": "constraint", "id": "client.re-engine-single-threaded-scripting", "node_kind": "context", "parents": ["CTX-0001", "ADR-0002"]}
 {"content_cid": "91a081b7dd81f7311975d7b7fd042876a4e4724b9c2bcaaa8b93b9f89625a213", "domain_kind": "constraint", "id": "client.reframework-dependency", "node_kind": "context", "parents": ["CTX-0001", "ADR-0002", "ADR-0003"]}
 {"content_cid": "3a01e73dd12015173e9441d6e7a36d7661a51bfef86bfb8f703fae46bd7df297", "domain_kind": "constraint", "id": "client.save-file-is-sacred", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001"]}
+{"content_cid": "dca32470dfc372c04cf326bff5cbbae39a9839efe58133de730946b2984c5055", "domain_kind": "finding", "id": "f.dd2-il2cpp-entry-points", "node_kind": "reasoning", "parents": ["Q-0002", "ADR-0003", "client.patch-breaks-offsets"]}
 {"content_cid": "b04a512e0e60310670d9d334f2c300aa3d79b81d49c122490bba3fc9aba562b3", "domain_kind": "finding", "id": "f.dd2-patch-cadence-slowing", "node_kind": "reasoning", "parents": ["client.patch-breaks-offsets"]}
+{"content_cid": "8c13ac086bde0616012d0151359f0b9dd938dd62ea29983580ffadaed07e8ff2", "domain_kind": "finding", "id": "f.reframework-api-surface", "node_kind": "reasoning", "parents": ["Q-0001", "Q-0003", "ADR-0002", "ADR-0003"]}
 {"content_cid": "89a310d630fadcb52381ae3f8e1f638a440e5906dd813be8db07d1add06ce765", "domain_kind": "finding", "id": "f.reframework-maintained", "node_kind": "reasoning", "parents": ["Q-0001", "client.reframework-dependency"]}
+{"content_cid": "fe9048d5c892b579d66eb242208a93d8f4d98a2543621d95f3f5805a8e3cb8cd", "domain_kind": "finding", "id": "f.udp-transport-loopback-green", "node_kind": "reasoning", "parents": ["Q-0001", "ADR-0002"]}
 {"content_cid": "fa8e77c7f1fa70c3d7e9637526c0250d3af8a09b052df70e85b3df6424562465", "domain_kind": "invariant", "id": "inv.no-game-state-writes", "node_kind": "reasoning", "parents": ["ADR-0001", "ADR-0003"]}
 {"content_cid": "9f0c50494827df1639103f560e8bf8e3a1e67ae906fb5353d03c9b0eed8a6ed2", "domain_kind": "invariant", "id": "inv.pet-project-floor", "node_kind": "reasoning", "parents": ["ADR-0001"]}
 {"content_cid": "5514baee5268e958d39a0a45b10cf608aaf36a2c9cac6e8bd62836ea28cd4b28", "domain_kind": "invariant", "id": "inv.reframework-only", "node_kind": "reasoning", "parents": ["ADR-0001"]}
