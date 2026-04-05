@@ -1,4 +1,4 @@
-.PHONY: seed k-stack test check harness clean-k-stack
+.PHONY: seed k-stack test check harness plugin-dll clean-k-stack
 
 K_STACK_BIN := k-stack/target/release/k-stack
 
@@ -22,6 +22,14 @@ check:
 
 harness:
 	cargo run -p frogma-harness --release
+
+# Cross-compile frogma_plugin.dll for Windows from Linux via cargo-xwin.
+# Requires: cargo install cargo-xwin, rustup target add x86_64-pc-windows-msvc.
+# First run downloads ~600MB of MSVC CRT headers (cached).
+plugin-dll:
+	XWIN_ACCEPT_LICENSE=1 cargo xwin build --release \
+	    -p frogma-plugin --target x86_64-pc-windows-msvc
+	@echo "Artifact: target/x86_64-pc-windows-msvc/release/frogma_plugin.dll"
 
 clean-k-stack:
 	cd k-stack && cargo clean

@@ -18,17 +18,30 @@ cross-compile. No wine, no VM.
 
     rustup target add x86_64-pc-windows-msvc
     cargo install cargo-xwin
-    # lld is also required (Ubuntu/Debian):
-    sudo apt install lld clang
 
-On first `xwin build` you'll be prompted to accept the MSVC EULA —
-that downloads ~600 MB of CRT/WinSDK headers into `~/.cache/cargo-xwin/`.
+No `apt install lld clang` needed — `cargo-xwin` bundles clang-cl and
+drives rustc's built-in `lld-link`.
 
 ### Build the plugin
 
-    cargo xwin build --release -p frogma-plugin --target x86_64-pc-windows-msvc
+You'll need to accept the MSVC EULA the first time (sets up the
+~600 MB CRT/WinSDK cache under `~/.cache/cargo-xwin/`). Either pass
+`XWIN_ACCEPT_LICENSE=1` or answer the prompt:
+
+    XWIN_ACCEPT_LICENSE=1 cargo xwin build --release -p frogma-plugin \
+        --target x86_64-pc-windows-msvc
 
 Output: `target/x86_64-pc-windows-msvc/release/frogma_plugin.dll`
+(~187 KB, PE32+ x86-64).
+
+Verify exports from the Linux host:
+
+    strings target/x86_64-pc-windows-msvc/release/frogma_plugin.dll \
+        | grep -E '^frogma_|^reframework_' | sort -u
+
+Should list: `frogma_local_peer_id`, `frogma_peer_count`,
+`frogma_peer_view`, `frogma_push_local_state`,
+`reframework_plugin_initialize`, `reframework_plugin_required_version`.
 
 ### Alternative: native Windows build
 
