@@ -89,8 +89,20 @@ def main() -> int:
             node_kind = KIND_MAP[domain_kind]
             ident = rec.get("id") or rec.get("ref")
 
-            if domain_kind in ("schema", "decision", "context", "question"):
+            if domain_kind in ("schema", "decision", "context") or (
+                domain_kind == "question" and "ref" in rec
+            ):
                 content = (ROOT / "knowledge" / rec["ref"]).read_text()
+            elif domain_kind == "question":
+                content = json.dumps(
+                    {
+                        "id": rec["id"],
+                        "title": rec["title"],
+                        "why": rec.get("why", ""),
+                        "status": rec.get("status", "open"),
+                    },
+                    sort_keys=True,
+                )
             elif domain_kind == "invariant":
                 content = json.dumps(
                     {
