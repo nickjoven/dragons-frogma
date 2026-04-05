@@ -1,0 +1,16 @@
+{
+  "$id": "dragons-frogma/decision.v1",
+  "name": "decision",
+  "version": 1,
+  "fields": [
+    { "name": "id",          "type": "string",   "required": true, "identity": true },
+    { "name": "title",       "type": "string",   "required": true },
+    { "name": "status",      "type": "string",   "required": true, "enum": ["proposed", "accepted", "superseded", "rejected"] },
+    { "name": "context",     "type": "string",   "required": true },
+    { "name": "decision",    "type": "string",   "required": true },
+    { "name": "consequences","type": "string",   "required": true },
+    { "name": "supersedes",  "type": "string[]", "required": false },
+    { "name": "invariants",  "type": "string[]", "required": false },
+    { "name": "created_at",  "type": "string",   "required": true }
+  ]
+}

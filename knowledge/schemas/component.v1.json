@@ -1,0 +1,14 @@
+{
+  "$id": "dragons-frogma/component.v1",
+  "name": "component",
+  "version": 1,
+  "fields": [
+    { "name": "id",           "type": "string",   "required": true, "identity": true },
+    { "name": "name",         "type": "string",   "required": true },
+    { "name": "layer",        "type": "string",   "required": true, "enum": ["client", "relay", "ingest", "resolver", "storage"] },
+    { "name": "responsibility","type": "string",  "required": true },
+    { "name": "inputs",       "type": "string[]", "required": false },
+    { "name": "outputs",      "type": "string[]", "required": false },
+    { "name": "invariants",   "type": "string[]", "required": false }
+  ]
+}

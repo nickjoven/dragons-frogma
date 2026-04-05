@@ -1,0 +1,13 @@
+{
+  "$id": "dragons-frogma/event.v1",
+  "name": "event",
+  "version": 1,
+  "fields": [
+    { "name": "id",          "type": "string", "required": true, "identity": true },
+    { "name": "type",        "type": "string", "required": true },
+    { "name": "actor",       "type": "string", "required": true },
+    { "name": "payload_cid", "type": "string", "required": true },
+    { "name": "causes",      "type": "string[]", "required": false },
+    { "name": "observed_at", "type": "string", "required": true }
+  ]
+}

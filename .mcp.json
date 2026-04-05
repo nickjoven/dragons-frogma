@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "k-stack": {
+      "command": "./k-stack/target/release/k-stack",
+      "env": {
+        "KET_HOME": ".ket"
+      }
+    }
+  }
+}

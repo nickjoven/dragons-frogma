@@ -1,0 +1,12 @@
+{
+  "$id": "dragons-frogma/invariant.v1",
+  "name": "invariant",
+  "version": 1,
+  "fields": [
+    { "name": "id",         "type": "string", "required": true, "identity": true },
+    { "name": "statement",  "type": "string", "required": true },
+    { "name": "kind",       "type": "string", "required": true, "enum": ["safety", "liveness", "soft", "legal"] },
+    { "name": "penalty",    "type": "number", "required": false },
+    { "name": "rationale",  "type": "string", "required": true }
+  ]
+}

@@ -1,0 +1,21 @@
+{"kind":"schema","ref":"schemas/decision.v1.json","parents":[]}
+{"kind":"schema","ref":"schemas/component.v1.json","parents":[]}
+{"kind":"schema","ref":"schemas/invariant.v1.json","parents":[]}
+{"kind":"schema","ref":"schemas/event.v1.json","parents":[]}
+{"kind":"decision","id":"ADR-0001","ref":"adr/0001-mvp-charter.md","parents":[]}
+{"kind":"decision","id":"ADR-0002","ref":"adr/0002-transparency.md","parents":["ADR-0001"]}
+{"kind":"decision","id":"ADR-0003","ref":"adr/0003-asynchrony.md","parents":["ADR-0001","ADR-0002"]}
+{"kind":"decision","id":"ADR-0004","ref":"adr/0004-event-driven.md","parents":["ADR-0001","ADR-0003"]}
+{"kind":"decision","id":"ADR-0005","ref":"adr/0005-lagrangian-relaxation.md","parents":["ADR-0001","ADR-0004"]}
+{"kind":"invariant","id":"inv.no-rights-reserved","statement":"No game assets shipped or modified in place","penalty":null,"parents":["ADR-0001"]}
+{"kind":"invariant","id":"inv.offline-first","statement":"Client must be fully playable offline","penalty":null,"parents":["ADR-0001"]}
+{"kind":"invariant","id":"inv.player-owns-events","statement":"Only the originating player can sign an event","penalty":null,"parents":["ADR-0001"]}
+{"kind":"invariant","id":"inv.cid-equals-proof","statement":"Event identity is its BLAKE3 CID; equality is bytewise","penalty":null,"parents":["ADR-0002"]}
+{"kind":"invariant","id":"inv.append-only-inbox","statement":"Inbox and outbox DAGs are append-only","penalty":null,"parents":["ADR-0002"]}
+{"kind":"invariant","id":"inv.causal-before-total","statement":"Consumers apply events in topological order consistent with causes[]","penalty":null,"parents":["ADR-0003"]}
+{"kind":"invariant","id":"inv.no-global-clock","statement":"No wall-clock synchronization required","penalty":null,"parents":["ADR-0003"]}
+{"kind":"invariant","id":"inv.projections-are-pure","statement":"Projections are pure functions of the event DAG","penalty":null,"parents":["ADR-0004"]}
+{"kind":"invariant","id":"inv.state-is-derived","statement":"No shared mutable state; state is derived from events","penalty":null,"parents":["ADR-0004"]}
+{"kind":"invariant","id":"inv.soft-global-constraints","statement":"Global invariants are soft with Lagrangian penalties","penalty":1.0,"parents":["ADR-0005"]}
+{"kind":"invariant","id":"inv.divergence-is-measured","statement":"Divergence is a reported metric, not a failure","penalty":1.0,"parents":["ADR-0005"]}
+{"kind":"invariant","id":"inv.no-rollback","statement":"System never forces a rollback to reconcile state","penalty":1.0,"parents":["ADR-0005"]}
