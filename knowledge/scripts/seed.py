@@ -30,6 +30,9 @@ KIND_MAP = {
     "event": "memory",
     "context": "context",
     "constraint": "context",
+    "question": "task",
+    "finding": "reasoning",
+    "pattern": "reasoning",
 }
 
 
@@ -86,7 +89,7 @@ def main() -> int:
             node_kind = KIND_MAP[domain_kind]
             ident = rec.get("id") or rec.get("ref")
 
-            if domain_kind in ("schema", "decision", "context"):
+            if domain_kind in ("schema", "decision", "context", "question"):
                 content = (ROOT / "knowledge" / rec["ref"]).read_text()
             elif domain_kind == "invariant":
                 content = json.dumps(
@@ -104,6 +107,26 @@ def main() -> int:
                         "statement": rec["statement"],
                         "kind": rec.get("ckind"),
                         "domain": rec.get("domain"),
+                    },
+                    sort_keys=True,
+                )
+            elif domain_kind == "finding":
+                content = json.dumps(
+                    {
+                        "id": rec["id"],
+                        "claim": rec["claim"],
+                        "evidence": rec.get("evidence", ""),
+                        "sources": rec.get("sources", []),
+                        "confidence": rec["confidence"],
+                        "accessed_at": rec["accessed_at"],
+                    },
+                    sort_keys=True,
+                )
+            elif domain_kind == "pattern":
+                content = json.dumps(
+                    {
+                        "id": rec["id"],
+                        "pattern": rec["pattern"],
                     },
                     sort_keys=True,
                 )

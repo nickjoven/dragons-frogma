@@ -7,6 +7,8 @@
 {"content_cid": "6f22f9d20e4006bbc9d9de01d34f797b01df6ac8a213df88ceea7bbe3552975e", "domain_kind": "decision", "id": "ADR-0004", "node_kind": "reasoning", "parents": ["ADR-0001", "ADR-0003"]}
 {"content_cid": "21d9dd4c3aab5701299a43c6d38388f9d860f6f30caa414716f4d398decc4d13", "domain_kind": "decision", "id": "ADR-0005", "node_kind": "reasoning", "parents": ["ADR-0001", "ADR-0004"]}
 {"content_cid": "5d0b416aeeb396f4a2e9875ab81d6ad41bf734a1638c0881899aa9f056a90515", "domain_kind": "context", "id": "CTX-0001", "node_kind": "context", "parents": ["ADR-0001"]}
+{"content_cid": "816c14e32ee4705b1c3fb0266bfcbb5ae12713223431947333279a4f91c7ae8d", "domain_kind": "question", "id": "Q-0001", "node_kind": "task", "parents": ["ADR-0001"]}
+{"content_cid": "d31af0ebd04a3002f2faa2020de5989ac0330bf6bdc1fa4703f15f8046a8be15", "domain_kind": "question", "id": "Q-0002", "node_kind": "task", "parents": ["ADR-0001", "CTX-0001"]}
 {"content_cid": "efb16169924f081d0fb708d7906e84b6b3754d283d15b1d3a36f43a7dfc722ee", "domain_kind": "constraint", "id": "client.no-anticheat-today", "node_kind": "context", "parents": ["CTX-0001"]}
 {"content_cid": "9b9b4b7a38fd9e818d514396a8d1e0ffd00e4ad90bba10f14205f088ad51682e", "domain_kind": "constraint", "id": "client.no-asset-redistribution", "node_kind": "context", "parents": ["CTX-0001", "ADR-0002"]}
 {"content_cid": "f6f5b60fb01118b1760d11a23b7421758ac58e9934d13eb3ab1be5a2581ed1c7", "domain_kind": "constraint", "id": "client.patch-breaks-offsets", "node_kind": "context", "parents": ["CTX-0001"]}
@@ -22,6 +24,14 @@
 {"content_cid": "8d343c1c7417fb3e45ef76224547661a47c0008925af4ecf67b7501b76221de3", "domain_kind": "constraint", "id": "env.github-mcp-can-disconnect", "node_kind": "context", "parents": ["CTX-0001"]}
 {"content_cid": "47e721f9a4a54afe29c5c3300c94ceafde500bf74fcdc2e6d556545cd84b69b8", "domain_kind": "constraint", "id": "env.ket-store-nondeterministic-node-cid", "node_kind": "context", "parents": ["CTX-0001"]}
 {"content_cid": "02925c428841ef8406e65bb7222646265e229b432efa9031ae4c17348446613a", "domain_kind": "constraint", "id": "env.mcp-loads-at-session-start", "node_kind": "context", "parents": ["CTX-0001"]}
+{"content_cid": "4f5cd049913a6fe0b21662fdb83e8371c6e2164f8f364f2142a18982985f4725", "domain_kind": "finding", "id": "f.active-community-1k-mods", "node_kind": "reasoning", "parents": ["Q-0002"]}
+{"content_cid": "dda1ddc8744984e58c4df3a3f90b1d95af54bd430ecf94184b957f724041e7ab", "domain_kind": "finding", "id": "f.anticheat-soft-risk", "node_kind": "reasoning", "parents": ["Q-0002", "client.no-anticheat-today"]}
+{"content_cid": "6002383c36411907ff2e3aab9fc6a508b341066e1ce682b4c6bad3f91530edce", "domain_kind": "finding", "id": "f.elden-ring-seamless-coop", "node_kind": "reasoning", "parents": ["Q-0001", "pat.p2p-via-platform-sockets"]}
+{"content_cid": "edaec86f18493a2fed17fbaf774079409d39699a308db322d39c8d238aef3a0c", "domain_kind": "finding", "id": "f.lua-native-dll-escape-hatch", "node_kind": "reasoning", "parents": ["Q-0002", "client.reframework-dependency"]}
+{"content_cid": "81a384dcf1dc47794214da821a4dc2c2051031063b05d3be39be4101e1ae899c", "domain_kind": "finding", "id": "f.no-mp-mod-exists", "node_kind": "reasoning", "parents": ["Q-0002", "ADR-0001"]}
+{"content_cid": "04a9dd40006831264008e61f37b16c9a7ef9163f06ea25ac48a041c44a6fd94d", "domain_kind": "finding", "id": "f.pak-fluffy-distribution", "node_kind": "reasoning", "parents": ["Q-0002", "dist.steam-workshop-gated"]}
+{"content_cid": "6a60737267c49bd2c9614e93539b348149369b6312ba72ea19e10af7b3492560", "domain_kind": "finding", "id": "f.pawn-network-precedent", "node_kind": "reasoning", "parents": ["Q-0002"]}
+{"content_cid": "376a9975e0545629569cb29a7dbb3d1af27dd6c78add3782ae9a715dec13a664", "domain_kind": "finding", "id": "f.reframework-current", "node_kind": "reasoning", "parents": ["Q-0002"]}
 {"content_cid": "685e8832aaee2075a83003f50957a23758e68cf76542901113e9fffb7a1cf376", "domain_kind": "invariant", "id": "inv.append-only-inbox", "node_kind": "reasoning", "parents": ["ADR-0002"]}
 {"content_cid": "a6feabf3c93d944a5c189027299de770be6572273f00072537c11865001ef165", "domain_kind": "invariant", "id": "inv.causal-before-total", "node_kind": "reasoning", "parents": ["ADR-0003"]}
 {"content_cid": "b93304b6bf8a916a3418be0160fa5400185f9f5eca77301eb463289a1a112d59", "domain_kind": "invariant", "id": "inv.cid-equals-proof", "node_kind": "reasoning", "parents": ["ADR-0002"]}
@@ -42,7 +52,16 @@
 {"content_cid": "2be3cdf3c8f6ebd69f77372d4ca2364ce98715ab530eabc7b0bea84f390ec8be", "domain_kind": "constraint", "id": "ops.no-paid-infra", "node_kind": "context", "parents": ["CTX-0001"]}
 {"content_cid": "9e3a1397d2b2680feca45a3ef4ef97a8b4dc08dead5b64985e7dff31286276e4", "domain_kind": "constraint", "id": "ops.solo-maintainer", "node_kind": "context", "parents": ["CTX-0001", "ADR-0005"]}
 {"content_cid": "c5962bb6ce57da7c907043affa51f4c757aa9c22468e99ab9f445141fd9f7b4e", "domain_kind": "constraint", "id": "ops.telemetry-opt-in-only", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001"]}
+{"content_cid": "7e47a1df46f5c533b188786ff52959618f165f07d44d0427729f9d68ab6240e7", "domain_kind": "pattern", "id": "pat.desync-is-feature-not-bug", "node_kind": "reasoning", "parents": ["Q-0001", "ADR-0005"]}
+{"content_cid": "6860d072321a2805cedbbfc31cb35237775e3a7eb09b6af14fde0b7aedd851b1", "domain_kind": "pattern", "id": "pat.ghost-before-state", "node_kind": "reasoning", "parents": ["Q-0001"]}
+{"content_cid": "11e29c99007fc6e03d781e3fbf0ee8b9d59fc624cc87151d7b1d93d14001b8eb", "domain_kind": "pattern", "id": "pat.hook-framework-first", "node_kind": "reasoning", "parents": ["Q-0001"]}
+{"content_cid": "9ed13eaa5ed161e8b03b707b2eddf471ce14e61b869741b7960a53f3790748a3", "domain_kind": "pattern", "id": "pat.p2p-via-platform-sockets", "node_kind": "reasoning", "parents": ["Q-0001", "ADR-0003"]}
+{"content_cid": "5ab275364f1b4ea9e3deaf1577d4588e23b39ec0e27c28dca105246b33549055", "domain_kind": "pattern", "id": "pat.publisher-tolerance-is-load-bearing", "node_kind": "reasoning", "parents": ["Q-0001"]}
+{"content_cid": "bc4ac7390d6cf24ac7f20bb0e44392235d196645747af75459537fc05cf4caf3", "domain_kind": "pattern", "id": "pat.single-maintainer-seed", "node_kind": "reasoning", "parents": ["Q-0001"]}
+{"content_cid": "759e9ab23d8ad249b9304ab59be0479a930854f09140d700a6db6a4850134402", "domain_kind": "pattern", "id": "pat.version-brittleness-kills", "node_kind": "reasoning", "parents": ["Q-0001"]}
 {"content_cid": "401ae1768ed741ba13af2ec0cfcbf44ba1c2f690612480c97a64f4feec40e7f0", "domain_kind": "schema", "id": "schemas/component.v1.json", "node_kind": "cdom", "parents": []}
 {"content_cid": "90e3d753044ca47ede0bb2e4b79bbb2e537df941bc382e7117a56cb6a1310fc1", "domain_kind": "schema", "id": "schemas/decision.v1.json", "node_kind": "cdom", "parents": []}
 {"content_cid": "cee4276f0f387125066bce6e6d4d7b2bbc0fcc5efa2ff53ea909dfd21e87f940", "domain_kind": "schema", "id": "schemas/event.v1.json", "node_kind": "cdom", "parents": []}
+{"content_cid": "188c63e4e849902265efdb776c418573aa9d6d6f568a43a759f9627e46cc6e7a", "domain_kind": "schema", "id": "schemas/finding.v1.json", "node_kind": "cdom", "parents": []}
 {"content_cid": "9a5711d7c8b95bd74537dbed45511d2d64ac74d1019f4387e73f0709ad59e5d4", "domain_kind": "schema", "id": "schemas/invariant.v1.json", "node_kind": "cdom", "parents": []}
+{"content_cid": "5496cc95431c14ce58852c4fbc3e77e6f0917d87dedd8b4b8a7301213141d876", "domain_kind": "schema", "id": "schemas/question.v1.json", "node_kind": "cdom", "parents": []}
