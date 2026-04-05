@@ -6,6 +6,7 @@
 {"content_cid": "424de00f11011de7f625caeb5b0b70b63813220f07d5efba8d3f3f895b36dd00", "domain_kind": "decision", "id": "ADR-0003", "node_kind": "reasoning", "parents": ["ADR-0001", "ADR-0002"]}
 {"content_cid": "6f22f9d20e4006bbc9d9de01d34f797b01df6ac8a213df88ceea7bbe3552975e", "domain_kind": "decision", "id": "ADR-0004", "node_kind": "reasoning", "parents": ["ADR-0001", "ADR-0003"]}
 {"content_cid": "21d9dd4c3aab5701299a43c6d38388f9d860f6f30caa414716f4d398decc4d13", "domain_kind": "decision", "id": "ADR-0005", "node_kind": "reasoning", "parents": ["ADR-0001", "ADR-0004"]}
+{"content_cid": "6578844913b898cf3c474686df8f68cf6c523ec6dad1e4df5e1ba5d1cef56e24", "domain_kind": "decision", "id": "ADR-0006", "node_kind": "reasoning", "parents": ["ADR-0001", "Q-0004", "f.capcom-dmca-active-campaign", "pat.single-maintainer-seed", "ops.solo-maintainer"]}
 {"content_cid": "5d0b416aeeb396f4a2e9875ab81d6ad41bf734a1638c0881899aa9f056a90515", "domain_kind": "context", "id": "CTX-0001", "node_kind": "context", "parents": ["ADR-0001"]}
 {"content_cid": "816c14e32ee4705b1c3fb0266bfcbb5ae12713223431947333279a4f91c7ae8d", "domain_kind": "question", "id": "Q-0001", "node_kind": "task", "parents": ["ADR-0001"]}
 {"content_cid": "d31af0ebd04a3002f2faa2020de5989ac0330bf6bdc1fa4703f15f8046a8be15", "domain_kind": "question", "id": "Q-0002", "node_kind": "task", "parents": ["ADR-0001", "CTX-0001"]}
@@ -61,9 +62,12 @@
 {"content_cid": "b93304b6bf8a916a3418be0160fa5400185f9f5eca77301eb463289a1a112d59", "domain_kind": "invariant", "id": "inv.cid-equals-proof", "node_kind": "reasoning", "parents": ["ADR-0002"]}
 {"content_cid": "38ef1c7f02a00af488e2e8804efe390e64b2d3ba33279b98308b2097325b7f67", "domain_kind": "invariant", "id": "inv.divergence-is-measured", "node_kind": "reasoning", "parents": ["ADR-0005"]}
 {"content_cid": "c3b3e04e10611414354adee47e5bf87336a0d8114d4ca3c57d94da7b1117a254", "domain_kind": "invariant", "id": "inv.no-global-clock", "node_kind": "reasoning", "parents": ["ADR-0003"]}
+{"content_cid": "8e1f9637283359f82524d7cbbed0a53d480e5695834d2a123e9f61a7d5a6da67", "domain_kind": "invariant", "id": "inv.no-promotion", "node_kind": "reasoning", "parents": ["ADR-0006"]}
+{"content_cid": "9e7fffb9c629156661446aff22a5da5cf38bae5d48359298e27cf10467eb448a", "domain_kind": "invariant", "id": "inv.no-release-artifacts", "node_kind": "reasoning", "parents": ["ADR-0006"]}
 {"content_cid": "52eb45fba5914fb98b678f40b8c1218d4bc340b51fb859acf3a5215df5d09095", "domain_kind": "invariant", "id": "inv.no-rights-reserved", "node_kind": "reasoning", "parents": ["ADR-0001"]}
 {"content_cid": "171b757a86641b9df154cc944fb9dd0340479b0414b49d226b5f2d1e761a6bc0", "domain_kind": "invariant", "id": "inv.no-rollback", "node_kind": "reasoning", "parents": ["ADR-0005"]}
 {"content_cid": "f9758d50eccf65dd1674ed143f73de32599853d623f118a9928b32dbdd551856", "domain_kind": "invariant", "id": "inv.offline-first", "node_kind": "reasoning", "parents": ["ADR-0001"]}
+{"content_cid": "abbee04554e0c0dc1126558ba61a82521aae61ed9da176f0f5209d68b9d5f6a0", "domain_kind": "invariant", "id": "inv.pet-project-floor", "node_kind": "reasoning", "parents": ["ADR-0006"]}
 {"content_cid": "79005c9c855010e4cb33c7fe11e4ccb706c25e4de88211844bc286ca5bfa49ef", "domain_kind": "invariant", "id": "inv.player-owns-events", "node_kind": "reasoning", "parents": ["ADR-0001"]}
 {"content_cid": "aea4807abb613148acd95fe845c4181d69b6bb296b7bab0c0fa2524a9c411ffa", "domain_kind": "invariant", "id": "inv.projections-are-pure", "node_kind": "reasoning", "parents": ["ADR-0004"]}
 {"content_cid": "6bcce85e0febf2c9c2bd9a1cbed3ec8f4294a3e2043a2241a0fc9634d1a231b0", "domain_kind": "invariant", "id": "inv.soft-global-constraints", "node_kind": "reasoning", "parents": ["ADR-0005"]}
