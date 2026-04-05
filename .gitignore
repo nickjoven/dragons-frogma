@@ -1,4 +1,4 @@
 .ket/
-k-stack/target/
+target/
 *.log
 knowledge/graph/nodes.run
