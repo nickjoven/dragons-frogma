@@ -24,11 +24,15 @@ parents. Divergence is resolved the same way git resolves it for code:
 
     knowledge/
       schemas/       canon.d JSON schemas (decision, component, invariant)
-      adr/           architectural decision records (markdown, front-matter)
+      adr/           architectural decision records (markdown)
+      context/       environmental constraints (what's possible, what isn't)
       graph/
-        seed.jsonl   parent/child edges for initial ingest
+        seed.jsonl   parent/child edges, the authoritative manifest
+        cids.lock    deterministic content_cid snapshot (diff oracle)
+        nodes.run    ephemeral per-run node_cids (gitignored)
       scripts/
-        seed.sh      populates .ket/ via k-stack MCP tools
+        seed.py      drives k-stack over stdio JSON-RPC, regenerates lock
+        seed.sh      alternate path via ket-cli
 
 ## Seeding the graph
 
@@ -38,10 +42,14 @@ Build k-stack once:
 
 Then populate:
 
-    ./knowledge/scripts/seed.sh
+    KET_HOME=.ket python3 knowledge/scripts/seed.py
 
-This writes the content-addressed store to `.ket/` (gitignored — the store is
-derivable from the tracked artifacts in `knowledge/`).
+This writes the content-addressed store to `.ket/` (gitignored) and rewrites
+`knowledge/graph/cids.lock`. The lock pins **content_cid** (deterministic,
+re-running on unchanged inputs produces an identical file). node_cids live in
+`nodes.run` and are ephemeral because `ket_store` embeds a timestamp in the
+DAG node header — diff `cids.lock` for divergence detection, ignore node_cid
+differences.
 
 ## Resolving divergence
 

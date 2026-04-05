@@ -19,3 +19,27 @@
 {"kind":"invariant","id":"inv.soft-global-constraints","statement":"Global invariants are soft with Lagrangian penalties","penalty":1.0,"parents":["ADR-0005"]}
 {"kind":"invariant","id":"inv.divergence-is-measured","statement":"Divergence is a reported metric, not a failure","penalty":1.0,"parents":["ADR-0005"]}
 {"kind":"invariant","id":"inv.no-rollback","statement":"System never forces a rollback to reconcile state","penalty":1.0,"parents":["ADR-0005"]}
+{"kind":"context","id":"CTX-0001","ref":"context/constraints.md","parents":["ADR-0001"]}
+{"kind":"constraint","id":"env.mcp-loads-at-session-start","statement":"MCP servers register at session start; mid-session .mcp.json changes require restart","ckind":"observed","domain":"env","parents":["CTX-0001"]}
+{"kind":"constraint","id":"env.ket-store-nondeterministic-node-cid","statement":"ket_store returns stable content_cid but fresh node_cid each call; lineage equality must use content_cid","ckind":"observed","domain":"env","parents":["CTX-0001"]}
+{"kind":"constraint","id":"env.cargo-needs-network","statement":"First-time k-stack builds fetch git deps + crates.io; CI must allow outbound HTTPS","ckind":"observed","domain":"env","parents":["CTX-0001"]}
+{"kind":"constraint","id":"env.cloud-sandbox-ephemeral","statement":"Dev cloud sandbox resets between sessions; .ket persists only via git-ignored local dir or explicit export","ckind":"observed","domain":"env","parents":["CTX-0001"]}
+{"kind":"constraint","id":"env.github-mcp-can-disconnect","statement":"External MCP servers may drop mid-session; tool availability is not static","ckind":"observed","domain":"env","parents":["CTX-0001"]}
+{"kind":"constraint","id":"client.no-asset-redistribution","statement":"Cannot ship any DD2 textures, meshes, audio, scripts, or decompiled code","ckind":"hard","domain":"client","parents":["CTX-0001","ADR-0002"]}
+{"kind":"constraint","id":"client.reframework-dependency","statement":"Hooking DD2 is practical only via REFramework/Lua; direct memory patching is brittle across patches","ckind":"soft","domain":"client","parents":["CTX-0001"]}
+{"kind":"constraint","id":"client.patch-breaks-offsets","statement":"Capcom patches rotate struct layouts; offset-based hooks need a versioned signature table","ckind":"hard","domain":"client","parents":["CTX-0001"]}
+{"kind":"constraint","id":"client.re-engine-single-threaded-scripting","statement":"REFramework Lua runs on the render thread; heavy I/O must be off-thread","ckind":"hard","domain":"client","parents":["CTX-0001","ADR-0003"]}
+{"kind":"constraint","id":"client.no-anticheat-today","statement":"DD2 ships without kernel anti-cheat as of this writing; can change in a patch","ckind":"soft","domain":"client","parents":["CTX-0001"]}
+{"kind":"constraint","id":"client.save-file-is-sacred","statement":"Never write to the player's DD2 save file; mod state lives in a sidecar","ckind":"hard","domain":"client","parents":["CTX-0001","ADR-0001"]}
+{"kind":"constraint","id":"dist.steam-workshop-gated","statement":"DD2 Workshop is Capcom-moderated; network-code mods likely disallowed. Distribute via GitHub + Nexus","ckind":"soft","domain":"dist","parents":["CTX-0001","ADR-0001"]}
+{"kind":"constraint","id":"dist.no-rights-reserved","statement":"Mod license is permissive (MIT-compatible); no EULA overlay, no telemetry without opt-in","ckind":"hard","domain":"dist","parents":["CTX-0001","ADR-0001"]}
+{"kind":"constraint","id":"dist.dmca-surface","statement":"A relay storing player-authored content has DMCA exposure; keep relays dumb, CID-only, TTL-bounded","ckind":"hard","domain":"dist","parents":["CTX-0001","ADR-0002"]}
+{"kind":"constraint","id":"dist.eu-data-residency","statement":"Player-identifying payloads cross GDPR; treat player IDs as pseudonymous keys","ckind":"hard","domain":"dist","parents":["CTX-0001"]}
+{"kind":"constraint","id":"net.p2p-nat-hostile","statement":"Most players behind symmetric NAT; pure P2P requires relay fallback; start relay-only","ckind":"hard","domain":"net","parents":["CTX-0001","ADR-0003"]}
+{"kind":"constraint","id":"net.offline-days-common","statement":"Players play offline for days; inbox must tolerate arbitrary drain delay","ckind":"hard","domain":"net","parents":["CTX-0001","ADR-0003"]}
+{"kind":"constraint","id":"net.mobile-backhaul","statement":"Bandwidth budget per session should be <1 MB/hour baseline for tethered players","ckind":"economic","domain":"net","parents":["CTX-0001"]}
+{"kind":"constraint","id":"net.relay-cheap-but-not-free","statement":"One $5/mo VPS fans out ~10k CIDs/day; beyond that needs sharding or BYO-relay","ckind":"economic","domain":"net","parents":["CTX-0001"]}
+{"kind":"constraint","id":"net.no-server-authoritative-physics","statement":"Cannot replicate DD2 physics server-side; projections are best-effort","ckind":"hard","domain":"net","parents":["CTX-0001","ADR-0005"]}
+{"kind":"constraint","id":"ops.solo-maintainer","statement":"Assume one maintainer; anything needing 24/7 ops is out of scope","ckind":"economic","domain":"ops","parents":["CTX-0001","ADR-0005"]}
+{"kind":"constraint","id":"ops.no-paid-infra","statement":"MVP runs on one donated VPS; scale-out is a later problem","ckind":"economic","domain":"ops","parents":["CTX-0001"]}
+{"kind":"constraint","id":"ops.telemetry-opt-in-only","statement":"No crash reports, metrics, or pings without explicit player opt-in","ckind":"hard","domain":"ops","parents":["CTX-0001","ADR-0001"]}
