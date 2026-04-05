@@ -1,68 +1,32 @@
-# Environmental substrate: what's possible, what isn't
+# Constraints that actually apply
 
-This is the ground truth the architecture stands on. Each constraint here has
-a CID in the knowledge graph and is linked to the ADR(s) it forced. If a
-constraint is later shown to be false, supersede it — and the ADRs that
-depended on it go up for review automatically via `ket_children`.
+Short, focused list. Most of the distribution / DMCA / relay-economics
+material was mooted by ADR-0001's pet-project scope and has been removed.
+Git history has the old constraints if we ever need them back.
 
-Constraints are grouped by domain, each with kind:
-- **hard** — physical or legal; treat as axiom
-- **soft** — true today, tunable or negotiable
-- **economic** — true under current cost assumptions
-- **observed** — verified in this repo's history
-
-## A. Development & build environment (observed this session)
+## Client environment
 
 | id | statement | kind |
 |----|-----------|------|
-| `env.mcp-loads-at-session-start` | MCP servers register at Claude Code session start; mid-session `.mcp.json` changes require restart. | observed |
-| `env.ket-store-nondeterministic-node-cid` | `ket_store` returns stable `content_cid` but fresh `node_cid` each call (timestamp in header). Lineage equality must use content_cid. | observed |
-| `env.cargo-needs-network` | First-time builds fetch git deps (`ket`, `canon.d`) + crates.io; CI must allow outbound HTTPS. | observed |
-| `env.cloud-sandbox-ephemeral` | The dev cloud sandbox resets between sessions; `.ket/` persists only via git-ignored local dir or explicit export. | observed |
-| `env.github-mcp-can-disconnect` | External MCP servers (github) may drop mid-session without warning. Don't treat tool availability as static. | observed |
+| `client.reframework-dependency` | Hooks come only from REFramework Lua + plugin DLL; no memory patching, no DLL injection outside REFramework's loader. | hard |
+| `client.patch-breaks-offsets` | DD2 patches can rotate IL2CPP type layouts. Any typed access needs a signature/version check. | hard |
+| `client.re-engine-single-threaded-scripting` | REFramework Lua runs on the render thread. Network I/O and any sustained work goes off-thread via the native plugin. | hard |
+| `client.save-file-is-sacred` | Never read, write, or stat DD2 save files. The mod has no persistent on-disk state at all in v0.1. | hard |
+| `client.no-asset-redistribution` | Never ship Capcom assets (textures, meshes, scripts, audio, decompiled code). Not even "for convenience." | hard |
+| `client.no-game-state-writes` | Never mutate DD2 entities, pawns, quest flags, inventories, world state. Overlay draws only. | hard |
+| `client.dont-re-capcom-netcode` | Do not reverse-engineer or hook into DD2's pawn-sharing network. Read state only via REFramework's IL2CPP surface. | hard |
 
-## B. Dragon's Dogma 2 client environment
-
-| id | statement | kind |
-|----|-----------|------|
-| `client.no-asset-redistribution` | We cannot ship any DD2 textures, meshes, audio, scripts, or decompiled code. | hard |
-| `client.reframework-dependency` | Hooking DD2 is practical only via REFramework / Lua; direct memory patching is brittle across Capcom patches. | soft |
-| `client.patch-breaks-offsets` | Capcom patches rotate struct layouts; any offset-based hook needs a versioned signature table. | hard |
-| `client.re-engine-single-threaded-scripting` | REFramework Lua runs on the render thread; heavy I/O must be off-thread. | hard |
-| `client.no-anticheat-today` | DD2 ships without kernel anti-cheat as of this writing, but that can change in a patch. | soft |
-| `client.save-file-is-sacred` | Never write to the player's DD2 save file. All mod state lives in a sidecar. | hard |
-
-## C. Distribution & legal
+## Operational
 
 | id | statement | kind |
 |----|-----------|------|
-| `dist.steam-workshop-gated` | DD2 Workshop is Capcom-moderated; assume network-code mods are disallowed. Distribute via GitHub releases + Nexus. | soft |
-| `dist.no-rights-reserved` | Mod license is permissive (MIT-compatible). No EULA overlay, no telemetry without explicit opt-in. | hard |
-| `dist.dmca-surface` | A relay that stores arbitrary player-authored content has DMCA exposure. Keep relays dumb, CID-only, TTL-bounded. | hard |
-| `dist.eu-data-residency` | Player-identifying payloads (even nicknames) cross GDPR. Treat player IDs as pseudonymous keys. | hard |
+| `ops.solo-maintainer` | One person. Every architectural decision is priced in weekends. | hard |
+| `ops.friends-on-overlay` | Assume friends share a Tailscale/ZeroTier tailnet or LAN. NAT traversal is not our problem. | soft |
+| `ops.no-persistence` | No databases, no disk state, no migrations. In-memory ring buffers only. | soft |
 
-## D. Network & transport
+## How these shape the ADRs
 
-| id | statement | kind |
-|----|-----------|------|
-| `net.p2p-nat-hostile` | Most players are behind symmetric NAT; pure P2P requires relay fallback anyway. Start with relay-only. | hard |
-| `net.offline-days-common` | Players frequently play offline for days. Inbox must tolerate arbitrary drain delay. | hard |
-| `net.mobile-backhaul` | Some players tether; bandwidth budget per session should be < 1 MB/hour baseline. | economic |
-| `net.relay-cheap-but-not-free` | A single $5/mo VPS can fan out ~10k CIDs/day; beyond that needs sharding or BYO-relay. | economic |
-| `net.no-server-authoritative-physics` | We cannot and will not replicate DD2's physics server-side. Projections are best-effort. | hard |
-
-## E. Operational
-
-| id | statement | kind |
-|----|-----------|------|
-| `ops.solo-maintainer` | Assume one maintainer. Anything that needs 24/7 ops is out of scope. | economic |
-| `ops.no-paid-infra` | MVP runs on a single donated VPS. Scale-out is a later problem. | economic |
-| `ops.telemetry-opt-in-only` | No crash reports, no metrics, no pings without the player clicking yes. | hard |
-
-## How constraints shape the architecture
-
-- `net.p2p-nat-hostile` + `net.offline-days-common` → **ADR-0003 (async relays)**
-- `client.no-asset-redistribution` + `dist.dmca-surface` → **ADR-0002 (CID-only relays)**
-- `net.no-server-authoritative-physics` + `ops.solo-maintainer` → **ADR-0005 (Lagrangian relaxation)**
-- `client.patch-breaks-offsets` → forces a versioned hook table (future ADR-0006)
-- `env.ket-store-nondeterministic-node-cid` → `cids.lock` pins **content_cid**, not node_cid
+- `client.reframework-dependency` + `client.re-engine-single-threaded-scripting` → ADR-0002 (plugin DLL runs UDP off-thread)
+- `client.no-game-state-writes` + `client.save-file-is-sacred` → ADR-0003 (overlay rendering only)
+- `ops.friends-on-overlay` → ADR-0002 (no NAT traversal, no GNS)
+- `client.patch-breaks-offsets` → every IL2CPP read carries a version guard

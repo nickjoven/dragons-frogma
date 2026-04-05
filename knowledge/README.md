@@ -23,16 +23,15 @@ parents. Divergence is resolved the same way git resolves it for code:
 ## Layout
 
     knowledge/
-      schemas/       canon.d JSON schemas (decision, component, invariant)
+      schemas/       canon.d JSON schemas (decision, invariant, question, finding)
       adr/           architectural decision records (markdown)
-      context/       environmental constraints (what's possible, what isn't)
+      context/       constraints that actually apply
       graph/
         seed.jsonl   parent/child edges, the authoritative manifest
         cids.lock    deterministic content_cid snapshot (diff oracle)
         nodes.run    ephemeral per-run node_cids (gitignored)
       scripts/
         seed.py      drives k-stack over stdio JSON-RPC, regenerates lock
-        seed.sh      alternate path via ket-cli
 
 ## Seeding the graph
 
@@ -53,25 +52,15 @@ differences.
 
 ## Resolving divergence
 
-When two branches both modify an ADR:
+Two contributors each run `seed.py`. Diff their `cids.lock` files. Any line
+with a differing `content_cid` points at the artifact that diverged. Use
+`ket_lineage` (MCP) to walk the parents back to the shared ancestor.
 
-    # On branch A
-    cid_a=$(ket put --kind=adr < knowledge/adr/0003-asynchrony.md)
+## Charter (summary)
 
-    # On branch B (after merge attempt)
-    cid_b=$(ket put --kind=adr < knowledge/adr/0003-asynchrony.md)
+Pet-project presence mod for Dragon's Dogma 2: render friends' positions as
+ghost overlays while each player plays their own save. REFramework Lua +
+small native UDP plugin, friends on a Tailscale overlay, no distribution.
+See `adr/0001-charter.md`.
 
-    # If cid_a == cid_b, the merge is a no-op. Otherwise:
-    ket lineage $cid_a
-    ket lineage $cid_b
-    # walk back to the shared ancestor, decide which chain to keep.
-
-The MCP tools (`ket_lineage`, `ket_align`, `ket_children`, `ket_topology`) do
-the same from inside an LLM session.
-
-## MVP charter (summary)
-
-Transparent, asynchronous, event-driven, Lagrangian-relaxed multiplayer for
-Dragon's Dogma 2. Steam client, no rights reserved. The four adjectives are
-load-bearing — each has its own ADR and each downstream component cites them
-as parents. See `adr/0001-mvp-charter.md`.
+**k-stack is for documentation; the runtime is boring UDP.**
