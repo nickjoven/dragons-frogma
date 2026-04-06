@@ -183,11 +183,18 @@ pub unsafe extern "C" fn reframework_plugin_initialize(
     log_info(b"[frogma] plugin_initialize: starting peer loop\0");
 
     // Register Lua bindings via on_lua_state_created.
-    if let Some(f) = state().lock().unwrap().functions {
-        if let Some(register) = f.on_lua_state_created {
-            register(on_lua_state_created);
-            log_info(b"[frogma] registered on_lua_state_created callback\0");
-        }
+    // IMPORTANT: extract the fn pointer and drop the guard BEFORE calling
+    // register(). REFramework may invoke our callback immediately, and
+    // the callback calls log_info → state().lock(), which would deadlock
+    // if we were still holding the outer lock.
+    let on_lua_created = state()
+        .lock()
+        .unwrap()
+        .functions
+        .and_then(|f| f.on_lua_state_created);
+    if let Some(register) = on_lua_created {
+        register(on_lua_state_created);
+        log_info(b"[frogma] registered on_lua_state_created callback\0");
     }
 
     let peer_id = state().lock().unwrap().peer_id;
