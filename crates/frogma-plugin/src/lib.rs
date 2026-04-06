@@ -182,20 +182,7 @@ pub unsafe extern "C" fn reframework_plugin_initialize(
 
     log_info(b"[frogma] plugin_initialize: starting peer loop\0");
 
-    // Register Lua bindings via on_lua_state_created.
-    // IMPORTANT: extract the fn pointer and drop the guard BEFORE calling
-    // register(). REFramework may invoke our callback immediately, and
-    // the callback calls log_info → state().lock(), which would deadlock
-    // if we were still holding the outer lock.
-    let on_lua_created = state()
-        .lock()
-        .unwrap()
-        .functions
-        .and_then(|f| f.on_lua_state_created);
-    if let Some(register) = on_lua_created {
-        register(on_lua_state_created);
-        log_info(b"[frogma] registered on_lua_state_created callback\0");
-    }
+    log_info(b"[frogma] using file-based IPC (frogma_peers.txt / frogma_local.txt)\0");
 
     let peer_id = state().lock().unwrap().peer_id;
     let cfg = PeerConfig {
@@ -210,8 +197,13 @@ pub unsafe extern "C" fn reframework_plugin_initialize(
 
     match frogma_peer::start(cfg, provider) {
         Ok(handle) => {
+            let table = handle.table.clone();
+            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let local_for_ipc = state().lock().unwrap().local_state.clone();
+            start_ipc_bridge(table.clone(), local_for_ipc, peer_id, stop);
+
             let mut guard = state().lock().unwrap();
-            guard.peer_table = Some(handle.table.clone());
+            guard.peer_table = Some(table);
             guard.peer_handle = Some(handle);
             drop(guard);
             log_info(b"[frogma] plugin_initialize: peer loop up on 0.0.0.0:45100\0");
@@ -232,185 +224,89 @@ fn fresh_peer_id() -> u64 {
         .unwrap_or(0xdead_beef)
 }
 
-// ---------- Lua bridge via on_lua_state_created -------------------------
+// ---------- File-based IPC bridge ---------------------------------------
 //
-// REFramework's Lua sandbox strips LuaJIT `ffi`, so we can't call DLL
-// exports from Lua directly. Instead we register Lua globals from the
-// plugin's on_lua_state_created callback. The Lua C API symbols
-// (lua_pushnumber, lua_setfield, etc.) are resolved at runtime from
-// the host process — REFramework ships LuaJIT, so the symbols are
-// already in memory.
+// REFramework statically links LuaJIT without exporting the Lua C API,
+// and Lua 5.1 C API is NOT binary-compatible with LuaJIT's lua_State
+// layout. So we can't register Lua functions from the plugin.
 //
-// On Linux builds we skip this entire section (no Windows API for
-// GetProcAddress, and the Lua bridge is only exercised inside DD2).
+// Instead we use text files for bidirectional IPC:
+//   - Plugin writes  reframework/frogma_peers.txt  (peer snapshots)
+//   - Lua writes     reframework/frogma_local.txt  (local player state)
+//   - Plugin reads   frogma_local.txt to feed the tx thread
+//   - Lua reads      frogma_peers.txt to draw ghost markers
+//
+// Both files are tiny (<1 KB), written atomically via rename, and
+// polled at frame rate. This is architecturally ugly but mechanically
+// simple and completely avoids the Lua C API problem.
 
-#[cfg(target_os = "windows")]
-mod lua_bridge {
-    use super::*;
+/// IPC file paths relative to DD2's working directory.
+const PEERS_PATH: &str = "reframework/frogma_peers.txt";
+const LOCAL_PATH: &str = "reframework/frogma_local.txt";
+const PEER_ID_PATH: &str = "reframework/frogma_peer_id.txt";
 
-    // Lua 5.1 C API — linked from lua51-msvc/lua51.lib (pre-built via
-    // zig cc from lua-src 5.1.5). Binary-compatible with LuaJIT 2.1.
-    #[repr(C)]
-    pub struct LuaStateOpaque {
-        _private: [u8; 0],
-    }
-
-    const LUA_GLOBALSINDEX: c_int = -10002;
-
-    type LuaCFn = unsafe extern "C" fn(*mut LuaStateOpaque) -> c_int;
-
-    extern "C" {
-        fn lua_tonumber(l: *mut LuaStateOpaque, idx: c_int) -> f64;
-        fn lua_pushnumber(l: *mut LuaStateOpaque, n: f64);
-        fn lua_pushnil(l: *mut LuaStateOpaque);
-        fn lua_pushcclosure(l: *mut LuaStateOpaque, f: Option<LuaCFn>, n: c_int);
-        fn lua_setfield(l: *mut LuaStateOpaque, idx: c_int, k: *const c_char);
-    }
-
-    unsafe fn set_global(l: *mut LuaStateOpaque, name: &[u8], f: LuaCFn) {
-        lua_pushcclosure(l, Some(f), 0);
-        lua_setfield(l, LUA_GLOBALSINDEX, name.as_ptr() as *const c_char);
-    }
-
-    pub unsafe extern "C" fn register(l: LuaState) {
-        let l = l as *mut LuaStateOpaque;
-        set_global(l, b"frogma_push_local_state\0", w_push_local_state);
-        set_global(l, b"frogma_peer_count\0", w_peer_count);
-        set_global(l, b"frogma_peer_view\0", w_peer_view);
-        set_global(l, b"frogma_local_peer_id\0", w_local_peer_id);
-        log_info(b"[frogma] lua_bridge: registered 4 globals\0");
-    }
-
-    unsafe extern "C" fn w_push_local_state(l: *mut LuaStateOpaque) -> c_int {
-        frogma_push_local_state(
-            lua_tonumber(l, 1) as f32,
-            lua_tonumber(l, 2) as f32,
-            lua_tonumber(l, 3) as f32,
-            lua_tonumber(l, 4) as f32,
-            lua_tonumber(l, 5) as u16,
-            lua_tonumber(l, 6) as u16,
-            lua_tonumber(l, 7) as u8,
-            lua_tonumber(l, 8) as u8,
-        );
-        0
-    }
-
-    unsafe extern "C" fn w_peer_count(l: *mut LuaStateOpaque) -> c_int {
-        lua_pushnumber(l, frogma_peer_count() as f64);
-        1
-    }
-
-    unsafe extern "C" fn w_peer_view(l: *mut LuaStateOpaque) -> c_int {
-        let idx = lua_tonumber(l, 1) as usize;
-        let guard = state().lock().unwrap();
-        let table = match &guard.peer_table {
-            Some(t) => t,
-            None => { lua_pushnil(l); return 1; }
-        };
-        let snaps = table.snapshot();
-        let Some((_id, s)) = snaps.get(idx) else {
-            drop(guard);
-            lua_pushnil(l);
-            return 1;
-        };
-        let s = *s;
-        drop(guard);
-        lua_pushnumber(l, s.peer_id as f64);
-        lua_pushnumber(l, s.pos[0] as f64);
-        lua_pushnumber(l, s.pos[1] as f64);
-        lua_pushnumber(l, s.pos[2] as f64);
-        lua_pushnumber(l, s.yaw as f64);
-        lua_pushnumber(l, s.hp as f64);
-        lua_pushnumber(l, s.hp_max as f64);
-        lua_pushnumber(l, s.vocation as f64);
-        lua_pushnumber(l, s.pose as f64);
-        9
-    }
-
-    unsafe extern "C" fn w_local_peer_id(l: *mut LuaStateOpaque) -> c_int {
-        lua_pushnumber(l, frogma_local_peer_id() as f64);
-        1
-    }
-}
-
-// On non-Windows, provide a no-op callback so plugin_initialize compiles.
-#[cfg(not(target_os = "windows"))]
-mod lua_bridge {
-    use super::*;
-    pub unsafe extern "C" fn register(_l: *mut c_void) {}
-}
-
-/// The on_lua_state_created callback — dispatches to lua_bridge::register.
-unsafe extern "C" fn on_lua_state_created(l: LuaState) {
-    lua_bridge::register(l);
-}
-
-// ---------- C ABI bridge (still exported for direct use) ----------------
-
-#[repr(C)]
-pub struct FrogmaPeerView {
-    pub peer_id: u64,
-    pub seq: u32,
-    pub _pad0: u32,
-    pub t_send_ms: u64,
-    pub pos_x: f32,
-    pub pos_y: f32,
-    pub pos_z: f32,
-    pub yaw: f32,
-    pub hp: u16,
-    pub hp_max: u16,
-    pub vocation: u8,
-    pub pose: u8,
-    pub _pad1: u16,
-}
-
-#[no_mangle]
-pub extern "C" fn frogma_push_local_state(
-    pos_x: f32, pos_y: f32, pos_z: f32, yaw: f32,
-    hp: u16, hp_max: u16, vocation: u8, pose: u8,
+/// Start a background thread that:
+/// 1. Writes peer snapshots to PEERS_PATH every 100ms
+/// 2. Reads local player state from LOCAL_PATH every 100ms
+fn start_ipc_bridge(
+    peer_table: Arc<PeerTable>,
+    local_state: Arc<Mutex<LocalState>>,
+    peer_id: u64,
+    stop: Arc<std::sync::atomic::AtomicBool>,
 ) {
-    let local = state().lock().unwrap().local_state.clone();
-    *local.lock().unwrap() = LocalState {
-        pos: [pos_x, pos_y, pos_z],
-        yaw, hp, hp_max, vocation, pose,
-    };
-}
+    use std::io::Write;
 
-#[no_mangle]
-pub extern "C" fn frogma_peer_count() -> usize {
-    match &state().lock().unwrap().peer_table {
-        Some(t) => t.len(),
-        None => 0,
+    // Write peer_id once so Lua can identify us.
+    if let Ok(mut f) = std::fs::File::create(PEER_ID_PATH) {
+        let _ = writeln!(f, "{peer_id}");
     }
-}
 
-#[no_mangle]
-pub unsafe extern "C" fn frogma_peer_view(idx: usize, out: *mut FrogmaPeerView) -> bool {
-    if out.is_null() {
-        return false;
-    }
-    let guard = state().lock().unwrap();
-    let table = match &guard.peer_table {
-        Some(t) => t,
-        None => return false,
-    };
-    let snaps = table.snapshot();
-    let Some((_id, s)) = snaps.get(idx) else {
-        return false;
-    };
-    *out = FrogmaPeerView {
-        peer_id: s.peer_id, seq: s.seq, _pad0: 0,
-        t_send_ms: s.t_send_ms,
-        pos_x: s.pos[0], pos_y: s.pos[1], pos_z: s.pos[2],
-        yaw: s.yaw, hp: s.hp, hp_max: s.hp_max,
-        vocation: s.vocation, pose: s.pose, _pad1: 0,
-    };
-    true
-}
+    std::thread::Builder::new()
+        .name("frogma-ipc".into())
+        .spawn(move || {
+            let mut buf = String::with_capacity(512);
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                // --- Write peers ---
+                let snaps = peer_table.snapshot();
+                buf.clear();
+                buf.push_str(&format!("{}\n", snaps.len()));
+                for (_, s) in &snaps {
+                    buf.push_str(&format!(
+                        "{} {} {} {} {} {} {} {} {}\n",
+                        s.peer_id,
+                        s.pos[0], s.pos[1], s.pos[2],
+                        s.yaw, s.hp, s.hp_max, s.vocation, s.pose,
+                    ));
+                }
+                // Atomic write via temp + rename.
+                let tmp = format!("{PEERS_PATH}.tmp");
+                if let Ok(mut f) = std::fs::File::create(&tmp) {
+                    let _ = f.write_all(buf.as_bytes());
+                    let _ = std::fs::rename(&tmp, PEERS_PATH);
+                }
 
-#[no_mangle]
-pub extern "C" fn frogma_local_peer_id() -> u64 {
-    state().lock().unwrap().peer_id
+                // --- Read local player state ---
+                if let Ok(text) = std::fs::read_to_string(LOCAL_PATH) {
+                    let nums: Vec<f64> = text
+                        .split_whitespace()
+                        .filter_map(|s| s.parse().ok())
+                        .collect();
+                    if nums.len() >= 8 {
+                        *local_state.lock().unwrap() = LocalState {
+                            pos: [nums[0] as f32, nums[1] as f32, nums[2] as f32],
+                            yaw: nums[3] as f32,
+                            hp: nums[4] as u16,
+                            hp_max: nums[5] as u16,
+                            vocation: nums[6] as u8,
+                            pose: nums[7] as u8,
+                        };
+                    }
+                }
+
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        })
+        .ok();
 }
 
 // Safety: REFramework owns the pointees for the plugin's lifetime.
@@ -421,28 +317,29 @@ unsafe impl Sync for REFrameworkPluginFunctions {}
 unsafe impl Send for REFrameworkRendererData {}
 unsafe impl Sync for REFrameworkRendererData {}
 
+// ---------- Internal helpers (used by tests and IPC) --------------------
+
+fn frogma_push_local_state(
+    pos_x: f32, pos_y: f32, pos_z: f32, yaw: f32,
+    hp: u16, hp_max: u16, vocation: u8, pose: u8,
+) {
+    let local = state().lock().unwrap().local_state.clone();
+    *local.lock().unwrap() = LocalState {
+        pos: [pos_x, pos_y, pos_z],
+        yaw, hp, hp_max, vocation, pose,
+    };
+}
+
+fn frogma_peer_count() -> usize {
+    match &state().lock().unwrap().peer_table {
+        Some(t) => t.len(),
+        None => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn peer_view_layout() {
-        assert_eq!(std::mem::size_of::<FrogmaPeerView>(), 48);
-        assert_eq!(std::mem::align_of::<FrogmaPeerView>(), 8);
-        let v = FrogmaPeerView {
-            peer_id: 0, seq: 0, _pad0: 0, t_send_ms: 0,
-            pos_x: 0.0, pos_y: 0.0, pos_z: 0.0, yaw: 0.0,
-            hp: 0, hp_max: 0, vocation: 0, pose: 0, _pad1: 0,
-        };
-        let base = &v as *const _ as usize;
-        assert_eq!(&v.peer_id as *const _ as usize - base, 0);
-        assert_eq!(&v.seq as *const _ as usize - base, 8);
-        assert_eq!(&v.t_send_ms as *const _ as usize - base, 16);
-        assert_eq!(&v.pos_x as *const _ as usize - base, 24);
-        assert_eq!(&v.yaw as *const _ as usize - base, 36);
-        assert_eq!(&v.hp as *const _ as usize - base, 40);
-        assert_eq!(&v.pose as *const _ as usize - base, 45);
-    }
 
     #[test]
     fn push_local_state_updates_shared() {
@@ -460,10 +357,5 @@ mod tests {
     #[test]
     fn peer_count_is_zero_before_init() {
         assert_eq!(frogma_peer_count(), 0);
-    }
-
-    #[test]
-    fn peer_view_rejects_null_out() {
-        unsafe { assert!(!frogma_peer_view(0, std::ptr::null_mut())); }
     }
 }
