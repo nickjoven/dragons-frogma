@@ -10,3 +10,5 @@ crate-type = ["cdylib"]
 [dependencies]
 frogma-wire = { workspace = true }
 frogma-peer = { workspace = true }
+
+[build-dependencies]

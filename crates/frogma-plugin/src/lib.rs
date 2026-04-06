@@ -248,164 +248,87 @@ fn fresh_peer_id() -> u64 {
 mod lua_bridge {
     use super::*;
 
-    // Lua 5.1 / LuaJIT constants.
+    // Lua 5.1 C API — linked from lua51-msvc/lua51.lib (pre-built via
+    // zig cc from lua-src 5.1.5). Binary-compatible with LuaJIT 2.1.
+    #[repr(C)]
+    pub struct LuaStateOpaque {
+        _private: [u8; 0],
+    }
+
     const LUA_GLOBALSINDEX: c_int = -10002;
 
-    // Lua C API function-pointer types we need.
-    type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
-    type FnTonumber = unsafe extern "C" fn(LuaState, c_int) -> f64;
-    type FnPushnumber = unsafe extern "C" fn(LuaState, f64);
-    type FnPushboolean = unsafe extern "C" fn(LuaState, c_int);
-    type FnPushcclosure = unsafe extern "C" fn(LuaState, LuaCFunction, c_int);
-    type FnSetfield = unsafe extern "C" fn(LuaState, c_int, *const c_char);
-    type FnPushnil = unsafe extern "C" fn(LuaState);
+    type LuaCFn = unsafe extern "C" fn(*mut LuaStateOpaque) -> c_int;
 
-    struct LuaApi {
-        tonumber: FnTonumber,
-        pushnumber: FnPushnumber,
-        pushboolean: FnPushboolean,
-        pushcclosure: FnPushcclosure,
-        setfield: FnSetfield,
-        pushnil: FnPushnil,
+    extern "C" {
+        fn lua_tonumber(l: *mut LuaStateOpaque, idx: c_int) -> f64;
+        fn lua_pushnumber(l: *mut LuaStateOpaque, n: f64);
+        fn lua_pushnil(l: *mut LuaStateOpaque);
+        fn lua_pushcclosure(l: *mut LuaStateOpaque, f: Option<LuaCFn>, n: c_int);
+        fn lua_setfield(l: *mut LuaStateOpaque, idx: c_int, k: *const c_char);
     }
 
-    static LUA_API: OnceLock<Option<LuaApi>> = OnceLock::new();
-
-    extern "system" {
-        fn GetModuleHandleA(name: *const c_char) -> *mut c_void;
-        fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
+    unsafe fn set_global(l: *mut LuaStateOpaque, name: &[u8], f: LuaCFn) {
+        lua_pushcclosure(l, Some(f), 0);
+        lua_setfield(l, LUA_GLOBALSINDEX, name.as_ptr() as *const c_char);
     }
 
-    unsafe fn resolve_sym<T>(module: *mut c_void, name: &[u8]) -> Option<T> {
-        let p = GetProcAddress(module, name.as_ptr() as *const c_char);
-        if p.is_null() {
-            None
-        } else {
-            Some(std::mem::transmute_copy(&p))
-        }
-    }
-
-    fn resolve_lua_api() -> Option<LuaApi> {
-        unsafe {
-            // LuaJIT's symbols might be in lua51.dll (standalone) or in
-            // the host exe (REFramework embeds LuaJIT statically). Try
-            // lua51.dll first, then fall back to the main module (null).
-            let candidates: &[*const c_char] = &[
-                b"lua51.dll\0".as_ptr() as *const c_char,
-                std::ptr::null(),
-            ];
-            for &name in candidates {
-                let module = GetModuleHandleA(name);
-                if module.is_null() {
-                    continue;
-                }
-                let api = (|| -> Option<LuaApi> {
-                    Some(LuaApi {
-                        tonumber: resolve_sym(module, b"lua_tonumber\0")?,
-                        pushnumber: resolve_sym(module, b"lua_pushnumber\0")?,
-                        pushboolean: resolve_sym(module, b"lua_pushboolean\0")?,
-                        pushcclosure: resolve_sym(module, b"lua_pushcclosure\0")?,
-                        setfield: resolve_sym(module, b"lua_setfield\0")?,
-                        pushnil: resolve_sym(module, b"lua_pushnil\0")?,
-                    })
-                })();
-                if api.is_some() {
-                    return api;
-                }
-            }
-            None
-        }
-    }
-
-    fn lua_api() -> Option<&'static LuaApi> {
-        LUA_API.get_or_init(|| resolve_lua_api()).as_ref()
-    }
-
-    /// Helper: register a Lua C function as a global variable.
-    unsafe fn set_global(api: &LuaApi, l: LuaState, name: &[u8], f: LuaCFunction) {
-        (api.pushcclosure)(l, f, 0);
-        (api.setfield)(l, LUA_GLOBALSINDEX, name.as_ptr() as *const c_char);
-    }
-
-    /// Called by REFramework when a new Lua state is created.
-    /// We register our four bridge functions as globals.
     pub unsafe extern "C" fn register(l: LuaState) {
-        let Some(api) = lua_api() else {
-            log_info(b"[frogma] lua_bridge: could not resolve Lua C API\0");
-            return;
-        };
-
-        set_global(api, l, b"frogma_push_local_state\0", lua_push_local_state);
-        set_global(api, l, b"frogma_peer_count\0", lua_peer_count);
-        set_global(api, l, b"frogma_peer_view\0", lua_peer_view);
-        set_global(api, l, b"frogma_local_peer_id\0", lua_local_peer_id);
-
+        let l = l as *mut LuaStateOpaque;
+        set_global(l, b"frogma_push_local_state\0", w_push_local_state);
+        set_global(l, b"frogma_peer_count\0", w_peer_count);
+        set_global(l, b"frogma_peer_view\0", w_peer_view);
+        set_global(l, b"frogma_local_peer_id\0", w_local_peer_id);
         log_info(b"[frogma] lua_bridge: registered 4 globals\0");
     }
 
-    // -- Lua-callable wrappers -----------------------------------------------
-
-    /// frogma_push_local_state(x, y, z, yaw, hp, hp_max, vocation, pose)
-    unsafe extern "C" fn lua_push_local_state(l: LuaState) -> c_int {
-        let Some(api) = lua_api() else { return 0 };
-        let x = (api.tonumber)(l, 1) as f32;
-        let y = (api.tonumber)(l, 2) as f32;
-        let z = (api.tonumber)(l, 3) as f32;
-        let yaw = (api.tonumber)(l, 4) as f32;
-        let hp = (api.tonumber)(l, 5) as u16;
-        let hp_max = (api.tonumber)(l, 6) as u16;
-        let voc = (api.tonumber)(l, 7) as u8;
-        let pose = (api.tonumber)(l, 8) as u8;
-        frogma_push_local_state(x, y, z, yaw, hp, hp_max, voc, pose);
+    unsafe extern "C" fn w_push_local_state(l: *mut LuaStateOpaque) -> c_int {
+        frogma_push_local_state(
+            lua_tonumber(l, 1) as f32,
+            lua_tonumber(l, 2) as f32,
+            lua_tonumber(l, 3) as f32,
+            lua_tonumber(l, 4) as f32,
+            lua_tonumber(l, 5) as u16,
+            lua_tonumber(l, 6) as u16,
+            lua_tonumber(l, 7) as u8,
+            lua_tonumber(l, 8) as u8,
+        );
         0
     }
 
-    /// frogma_peer_count() -> number
-    unsafe extern "C" fn lua_peer_count(l: LuaState) -> c_int {
-        let Some(api) = lua_api() else { return 0 };
-        let n = frogma_peer_count();
-        (api.pushnumber)(l, n as f64);
+    unsafe extern "C" fn w_peer_count(l: *mut LuaStateOpaque) -> c_int {
+        lua_pushnumber(l, frogma_peer_count() as f64);
         1
     }
 
-    /// frogma_peer_view(idx) -> peer_id, pos_x, pos_y, pos_z, yaw, hp, hp_max, vocation, pose
-    ///                       -> nil on failure
-    unsafe extern "C" fn lua_peer_view(l: LuaState) -> c_int {
-        let Some(api) = lua_api() else { return 0 };
-        let idx = (api.tonumber)(l, 1) as usize;
+    unsafe extern "C" fn w_peer_view(l: *mut LuaStateOpaque) -> c_int {
+        let idx = lua_tonumber(l, 1) as usize;
         let guard = state().lock().unwrap();
         let table = match &guard.peer_table {
             Some(t) => t,
-            None => {
-                (api.pushnil)(l);
-                return 1;
-            }
+            None => { lua_pushnil(l); return 1; }
         };
         let snaps = table.snapshot();
         let Some((_id, s)) = snaps.get(idx) else {
             drop(guard);
-            (api.pushnil)(l);
+            lua_pushnil(l);
             return 1;
         };
-        let s = *s; // copy before dropping guard
+        let s = *s;
         drop(guard);
-        (api.pushnumber)(l, s.peer_id as f64);
-        (api.pushnumber)(l, s.pos[0] as f64);
-        (api.pushnumber)(l, s.pos[1] as f64);
-        (api.pushnumber)(l, s.pos[2] as f64);
-        (api.pushnumber)(l, s.yaw as f64);
-        (api.pushnumber)(l, s.hp as f64);
-        (api.pushnumber)(l, s.hp_max as f64);
-        (api.pushnumber)(l, s.vocation as f64);
-        (api.pushnumber)(l, s.pose as f64);
+        lua_pushnumber(l, s.peer_id as f64);
+        lua_pushnumber(l, s.pos[0] as f64);
+        lua_pushnumber(l, s.pos[1] as f64);
+        lua_pushnumber(l, s.pos[2] as f64);
+        lua_pushnumber(l, s.yaw as f64);
+        lua_pushnumber(l, s.hp as f64);
+        lua_pushnumber(l, s.hp_max as f64);
+        lua_pushnumber(l, s.vocation as f64);
+        lua_pushnumber(l, s.pose as f64);
         9
     }
 
-    /// frogma_local_peer_id() -> number
-    unsafe extern "C" fn lua_local_peer_id(l: LuaState) -> c_int {
-        let Some(api) = lua_api() else { return 0 };
-        let id = frogma_local_peer_id();
-        (api.pushnumber)(l, id as f64);
+    unsafe extern "C" fn w_local_peer_id(l: *mut LuaStateOpaque) -> c_int {
+        lua_pushnumber(l, frogma_local_peer_id() as f64);
         1
     }
 }
