@@ -143,6 +143,66 @@ fn log_error(msg: &[u8]) {
     }
 }
 
+// ---------- Config loading (reframework/frogma.toml) --------------------
+//
+// Minimal line-by-line parser. No TOML crate — the config is flat:
+//
+//   bind = "0.0.0.0:45100"
+//   peers = ["10.0.0.2:45100", "10.0.0.3:45100"]
+//
+// If the file is missing or unparseable, defaults apply.
+
+const CONFIG_PATH: &str = "reframework/frogma.toml";
+
+struct FrogmaConfig {
+    bind: std::net::SocketAddr,
+    peers: Vec<std::net::SocketAddr>,
+}
+
+fn load_config() -> FrogmaConfig {
+    let default = FrogmaConfig {
+        bind: "0.0.0.0:45100".parse().unwrap(),
+        peers: vec![],
+    };
+
+    let text = match std::fs::read_to_string(CONFIG_PATH) {
+        Ok(t) => t,
+        Err(_) => {
+            log_info(b"[frogma] no frogma.toml found - using defaults\0");
+            return default;
+        }
+    };
+
+    let mut bind = default.bind;
+    let mut peers = vec![];
+
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        if let Some(val) = line.strip_prefix("bind") {
+            let val = val.trim_start_matches(|c: char| c == ' ' || c == '=' || c == '"');
+            let val = val.trim_end_matches('"').trim();
+            if let Ok(addr) = val.parse() {
+                bind = addr;
+            }
+        } else if let Some(val) = line.strip_prefix("peers") {
+            // Parse: peers = ["addr1", "addr2"]
+            let val = val.trim_start_matches(|c: char| c == ' ' || c == '=');
+            // Extract quoted strings from the bracketed list.
+            for part in val.split('"') {
+                let part = part.trim();
+                if let Ok(addr) = part.parse::<std::net::SocketAddr>() {
+                    peers.push(addr);
+                }
+            }
+        }
+    }
+
+    FrogmaConfig { bind, peers }
+}
+
 // ---------- REFramework entry points ------------------------------------
 
 #[no_mangle]
@@ -185,10 +245,17 @@ pub unsafe extern "C" fn reframework_plugin_initialize(
     log_info(b"[frogma] using file-based IPC (frogma_peers.txt / frogma_local.txt)\0");
 
     let peer_id = state().lock().unwrap().peer_id;
+    let config = load_config();
+    // Log loaded config (can't use format! with log_info, so use fixed messages).
+    if config.peers.is_empty() {
+        log_info(b"[frogma] config: no peers - broadcasting to nobody until frogma.toml is edited\0");
+    } else {
+        log_info(b"[frogma] config: peers loaded from frogma.toml\0");
+    }
     let cfg = PeerConfig {
         peer_id,
-        bind: "0.0.0.0:45100".parse().unwrap(),
-        peers: vec![],
+        bind: config.bind,
+        peers: config.peers,
         tick: std::time::Duration::from_millis(100),
     };
 
