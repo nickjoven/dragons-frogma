@@ -6,9 +6,9 @@
 {"content_cid": "958cf18ff181472255d46aa69c7b32f802b7e33fb314e281b04b831a1d342d92", "domain_kind": "decision", "id": "ADR-0003", "node_kind": "reasoning", "parents": ["ADR-0001"]}
 {"content_cid": "d77e811daf7987ff5aca729efcc9e9439a68a5877c7208cd2dfd7a473d6a9b5c", "domain_kind": "context", "id": "CTX-0001", "node_kind": "context", "parents": ["ADR-0001"]}
 {"content_cid": "e4f7a4370df401a0c108276150fe502e5bc5c30f6abc152c0913e6f0d29890c1", "domain_kind": "question", "id": "Q-0001", "node_kind": "task", "parents": ["ADR-0002", "client.re-engine-single-threaded-scripting"]}
-{"content_cid": "add12822a8885e83802235be7b924589d0c303e5858b192768f0c7443380ea47", "domain_kind": "question", "id": "Q-0002", "node_kind": "task", "parents": ["ADR-0003"]}
+{"content_cid": "160b6f8a8fc25732cfa934abefcea8459cf6a7fe31bb1c76d1dc7d311a500fd1", "domain_kind": "question", "id": "Q-0002", "node_kind": "task", "parents": ["ADR-0003"]}
 {"content_cid": "9b632bd57b6f437f0488afb2cd4bfe0fe7538baee157be67e6f7422b8766d6f5", "domain_kind": "question", "id": "Q-0003", "node_kind": "task", "parents": ["ADR-0003", "client.re-engine-single-threaded-scripting"]}
-{"content_cid": "39eb23fa8cba888d8039067a5d46d102c7f72aedbeec49626d7ec097833c074f", "domain_kind": "question", "id": "Q-0004", "node_kind": "task", "parents": ["ADR-0002", "Q-0001", "client.reframework-dependency", "client.re-engine-single-threaded-scripting"]}
+{"content_cid": "d2be923b10ffa3c62e92336b295869d8d045dca0d05eea596786c4ff8b87a886", "domain_kind": "question", "id": "Q-0004", "node_kind": "task", "parents": ["ADR-0002", "Q-0001", "client.reframework-dependency", "client.re-engine-single-threaded-scripting"]}
 {"content_cid": "4e16d57586919a9bfb06abad9f9e73087bb689daa64437c45091dd07a44a1857", "domain_kind": "constraint", "id": "client.dont-re-capcom-netcode", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001"]}
 {"content_cid": "8eaf8ec18e73d8fb0baa708b91f75e6efc84c9129fbe67f911e6136dd9208f7a", "domain_kind": "constraint", "id": "client.no-asset-redistribution", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001"]}
 {"content_cid": "16efd0b1737f0aa0f8f3ce481346c7e9498ec997fb34c0b31d1c9d08fcb6de27", "domain_kind": "constraint", "id": "client.no-game-state-writes", "node_kind": "context", "parents": ["CTX-0001", "ADR-0001", "ADR-0003"]}
@@ -20,6 +20,8 @@
 {"content_cid": "b04a512e0e60310670d9d334f2c300aa3d79b81d49c122490bba3fc9aba562b3", "domain_kind": "finding", "id": "f.dd2-patch-cadence-slowing", "node_kind": "reasoning", "parents": ["client.patch-breaks-offsets"]}
 {"content_cid": "2cb9a96b179673989735e759c02218912dc70c4556c96c2e228e16d246eb0caf", "domain_kind": "finding", "id": "f.dd2-player-pos-path-mar2026", "node_kind": "reasoning", "parents": ["Q-0002", "ADR-0003", "client.patch-breaks-offsets"]}
 {"content_cid": "4d143eef94ae6ad7aeaf2f9dd9532d5802bbdc38722a283ea9564a6deffb642c", "domain_kind": "finding", "id": "f.dont-roll-own-projection", "node_kind": "reasoning", "parents": ["Q-0003", "ADR-0003"]}
+{"content_cid": "593679f273e803ff39fa7578705eaaa33e3750d2f511711e1ec222f094821f64", "domain_kind": "finding", "id": "f.file-ipc-works-e2e", "node_kind": "reasoning", "parents": ["Q-0002", "Q-0004", "ADR-0002", "ADR-0003"]}
+{"content_cid": "323db9b4840065cc28a42def1457becb1038ec51ccb858a328b21ce2a48a735b", "domain_kind": "finding", "id": "f.lua51-luajit-abi-incompatible", "node_kind": "reasoning", "parents": ["Q-0004", "client.reframework-dependency"]}
 {"content_cid": "e54c11a49f1588db964fd0859f42969f7ec32bbd618fa4833215414160037aff", "domain_kind": "finding", "id": "f.plugin-dll-cross-compiles", "node_kind": "reasoning", "parents": ["Q-0004"]}
 {"content_cid": "8c13ac086bde0616012d0151359f0b9dd938dd62ea29983580ffadaed07e8ff2", "domain_kind": "finding", "id": "f.reframework-api-surface", "node_kind": "reasoning", "parents": ["Q-0001", "Q-0003", "ADR-0002", "ADR-0003"]}
 {"content_cid": "89a310d630fadcb52381ae3f8e1f638a440e5906dd813be8db07d1add06ce765", "domain_kind": "finding", "id": "f.reframework-maintained", "node_kind": "reasoning", "parents": ["Q-0001", "client.reframework-dependency"]}
