@@ -4,13 +4,13 @@
 //! produces `frogma_plugin.dll`, which REFramework loads from
 //! `<DD2>/reframework/plugins/`. REFramework calls the two exported
 //! entry points below; we use them to stand up a UDP peer loop and
-//! stash the REFramework function table for later use from the Lua
-//! bridge.
+//! register Lua-callable functions via the `on_lua_state_created`
+//! callback.
 //!
 //! ABI mirrors REFramework's `include/reframework/API.h` at plugin
-//! version 1.15.0. We keep only the fields we actually touch typed;
-//! everything else is an opaque pointer so REFramework-internal
-//! layout changes can't misalign us.
+//! version 1.10.0 (the version shipping in user's DD2 REFramework
+//! build, dated 2025-03-05). The functions table has 17 fields
+//! (no on_pre_gui_draw_element, which was added after 1.10).
 //!
 //! Build (cross-compile from Linux):
 //!     cargo xwin build --release -p frogma-plugin \
@@ -32,13 +32,10 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use frogma_peer::{LocalState, PeerConfig, PeerHandle, PeerTable};
 
-// ---------- REFramework ABI ---------------------------------------------
-//
-// Verbatim from praydog/REFramework `include/reframework/API.h` at
-// plugin version 1.15.0.
+// ---------- REFramework ABI (v1.10.0) -----------------------------------
 
 const REFRAMEWORK_PLUGIN_VERSION_MAJOR: c_int = 1;
-const REFRAMEWORK_PLUGIN_VERSION_MINOR: c_int = 15;
+const REFRAMEWORK_PLUGIN_VERSION_MINOR: c_int = 10;
 const REFRAMEWORK_PLUGIN_VERSION_PATCH: c_int = 0;
 
 #[repr(C)]
@@ -51,17 +48,22 @@ pub struct REFrameworkPluginVersion {
 
 #[repr(C)]
 pub struct REFrameworkRendererData {
-    pub renderer_type: c_int, // 0 = D3D11, 1 = D3D12
+    pub renderer_type: c_int,
     pub device: *mut c_void,
     pub swapchain: *mut c_void,
     pub command_queue: *mut c_void,
 }
 
-/// Subset of REFramework's plugin-functions table.
-/// Field order must match `REFrameworkPluginFunctions` in API.h.
+/// Callback types for Lua state lifecycle.
+type LuaState = *mut c_void;
+type REFLuaStateCreatedCb = unsafe extern "C" fn(LuaState);
+type REFOnLuaStateCreatedFn =
+    unsafe extern "C" fn(cb: REFLuaStateCreatedCb) -> bool;
+
+/// Plugin-functions table, 17 fields matching API v1.10.0.
 #[repr(C)]
 pub struct REFrameworkPluginFunctions {
-    pub on_lua_state_created: *const c_void,
+    pub on_lua_state_created: Option<REFOnLuaStateCreatedFn>,
     pub on_lua_state_destroyed: *const c_void,
     pub on_present: *const c_void,
     pub on_pre_application_entry: *const c_void,
@@ -70,9 +72,6 @@ pub struct REFrameworkPluginFunctions {
     pub unlock_lua: *const c_void,
     pub on_device_reset: *const c_void,
     pub on_message: *const c_void,
-    /// `void log_error(const char* format, ...)` — we only pass
-    /// pre-formatted strings, so zero-varargs call is ABI-compatible
-    /// on x86_64.
     pub log_error: Option<unsafe extern "C" fn(*const c_char)>,
     pub log_warn: Option<unsafe extern "C" fn(*const c_char)>,
     pub log_info: Option<unsafe extern "C" fn(*const c_char)>,
@@ -81,7 +80,7 @@ pub struct REFrameworkPluginFunctions {
     pub delete_script_state: *const c_void,
     pub on_imgui_frame: *const c_void,
     pub on_imgui_draw_ui: *const c_void,
-    pub on_pre_gui_draw_element: *const c_void,
+    // No on_pre_gui_draw_element — that's in ≥1.11.
 }
 
 #[repr(C)]
@@ -90,7 +89,6 @@ pub struct REFrameworkPluginInitializeParam {
     pub version: *const REFrameworkPluginVersion,
     pub functions: *const REFrameworkPluginFunctions,
     pub renderer_data: *const REFrameworkRendererData,
-    /// `const REFrameworkSDKData*` — opaque for v0.
     pub sdk: *const c_void,
 }
 
@@ -126,30 +124,27 @@ fn state() -> &'static Mutex<PluginState> {
 }
 
 fn log_info(msg: &[u8]) {
-    let guard = state().lock().unwrap();
-    if let Some(f) = guard.functions {
-        if let Some(fp) = f.log_info {
-            unsafe { fp(msg.as_ptr() as *const c_char) };
+    if let Ok(guard) = state().lock() {
+        if let Some(f) = guard.functions {
+            if let Some(fp) = f.log_info {
+                unsafe { fp(msg.as_ptr() as *const c_char) };
+            }
         }
     }
 }
 
 fn log_error(msg: &[u8]) {
-    let guard = state().lock().unwrap();
-    if let Some(f) = guard.functions {
-        if let Some(fp) = f.log_error {
-            unsafe { fp(msg.as_ptr() as *const c_char) };
+    if let Ok(guard) = state().lock() {
+        if let Some(f) = guard.functions {
+            if let Some(fp) = f.log_error {
+                unsafe { fp(msg.as_ptr() as *const c_char) };
+            }
         }
     }
 }
 
 // ---------- REFramework entry points ------------------------------------
 
-/// REFramework calls this first, expecting us to fill in the minimum
-/// plugin API version we were built against.
-///
-/// # Safety
-/// REFramework guarantees `version` is a valid writable pointer.
 #[no_mangle]
 pub unsafe extern "C" fn reframework_plugin_required_version(
     version: *mut REFrameworkPluginVersion,
@@ -166,13 +161,6 @@ pub unsafe extern "C" fn reframework_plugin_required_version(
 
 const GAME_NAME_DD2: &[u8] = b"DD2\0";
 
-/// Called once after REFramework loads us. Stashes the function
-/// table, spins up the peer transport, stores the peer table
-/// handle so C-ABI bridge exports can read from it.
-///
-/// # Safety
-/// REFramework guarantees `param` is valid for the lifetime of the
-/// plugin.
 #[no_mangle]
 pub unsafe extern "C" fn reframework_plugin_initialize(
     param: *const REFrameworkPluginInitializeParam,
@@ -182,7 +170,6 @@ pub unsafe extern "C" fn reframework_plugin_initialize(
     }
     let p = &*param;
 
-    // Stash functions table first so log_info works everywhere below.
     {
         let mut guard = state().lock().unwrap();
         guard.functions = if p.functions.is_null() {
@@ -195,16 +182,22 @@ pub unsafe extern "C" fn reframework_plugin_initialize(
 
     log_info(b"[frogma] plugin_initialize: starting peer loop\0");
 
+    // Register Lua bindings via on_lua_state_created.
+    if let Some(f) = state().lock().unwrap().functions {
+        if let Some(register) = f.on_lua_state_created {
+            register(on_lua_state_created);
+            log_info(b"[frogma] registered on_lua_state_created callback\0");
+        }
+    }
+
     let peer_id = state().lock().unwrap().peer_id;
     let cfg = PeerConfig {
         peer_id,
         bind: "0.0.0.0:45100".parse().unwrap(),
-        peers: vec![], // populated from Lua / config sidecar (Leg F)
+        peers: vec![],
         tick: std::time::Duration::from_millis(100),
     };
 
-    // StateProvider reads from our shared Arc<Mutex<LocalState>>
-    // that Lua updates via frogma_push_local_state each frame.
     let shared = state().lock().unwrap().local_state.clone();
     let provider: frogma_peer::StateProvider = Box::new(move || *shared.lock().unwrap());
 
@@ -232,58 +225,227 @@ fn fresh_peer_id() -> u64 {
         .unwrap_or(0xdead_beef)
 }
 
-// ---------- C ABI bridge for Lua ----------------------------------------
+// ---------- Lua bridge via on_lua_state_created -------------------------
 //
-// Called from reframework/autorun/frogma.lua via package.loadlib or
-// REFramework's native-function hooks. All exports are `#[no_mangle]
-// extern "C"` so Lua can resolve them by name.
+// REFramework's Lua sandbox strips LuaJIT `ffi`, so we can't call DLL
+// exports from Lua directly. Instead we register Lua globals from the
+// plugin's on_lua_state_created callback. The Lua C API symbols
+// (lua_pushnumber, lua_setfield, etc.) are resolved at runtime from
+// the host process — REFramework ships LuaJIT, so the symbols are
+// already in memory.
+//
+// On Linux builds we skip this entire section (no Windows API for
+// GetProcAddress, and the Lua bridge is only exercised inside DD2).
 
-/// Flat struct Lua reads after calling frogma_peer_view.
-/// Layout is fixed and explicit; Lua ffi casts a byte buffer.
-///
-/// Size: 48 bytes. Padding is explicit so there's no doubt.
-#[repr(C)]
-pub struct FrogmaPeerView {
-    pub peer_id: u64,    // offset 0,  8 bytes
-    pub seq: u32,        // offset 8,  4 bytes
-    pub _pad0: u32,      // offset 12, 4 bytes (align t_send_ms)
-    pub t_send_ms: u64,  // offset 16, 8 bytes
-    pub pos_x: f32,      // offset 24
-    pub pos_y: f32,      // offset 28
-    pub pos_z: f32,      // offset 32
-    pub yaw: f32,        // offset 36
-    pub hp: u16,         // offset 40
-    pub hp_max: u16,     // offset 42
-    pub vocation: u8,    // offset 44
-    pub pose: u8,        // offset 45
-    pub _pad1: u16,      // offset 46, 2 bytes (total 48)
+#[cfg(target_os = "windows")]
+mod lua_bridge {
+    use super::*;
+
+    // Lua 5.1 / LuaJIT constants.
+    const LUA_GLOBALSINDEX: c_int = -10002;
+
+    // Lua C API function-pointer types we need.
+    type LuaCFunction = unsafe extern "C" fn(LuaState) -> c_int;
+    type FnTonumber = unsafe extern "C" fn(LuaState, c_int) -> f64;
+    type FnPushnumber = unsafe extern "C" fn(LuaState, f64);
+    type FnPushboolean = unsafe extern "C" fn(LuaState, c_int);
+    type FnPushcclosure = unsafe extern "C" fn(LuaState, LuaCFunction, c_int);
+    type FnSetfield = unsafe extern "C" fn(LuaState, c_int, *const c_char);
+    type FnPushnil = unsafe extern "C" fn(LuaState);
+
+    struct LuaApi {
+        tonumber: FnTonumber,
+        pushnumber: FnPushnumber,
+        pushboolean: FnPushboolean,
+        pushcclosure: FnPushcclosure,
+        setfield: FnSetfield,
+        pushnil: FnPushnil,
+    }
+
+    static LUA_API: OnceLock<Option<LuaApi>> = OnceLock::new();
+
+    extern "system" {
+        fn GetModuleHandleA(name: *const c_char) -> *mut c_void;
+        fn GetProcAddress(module: *mut c_void, name: *const c_char) -> *mut c_void;
+    }
+
+    unsafe fn resolve_sym<T>(module: *mut c_void, name: &[u8]) -> Option<T> {
+        let p = GetProcAddress(module, name.as_ptr() as *const c_char);
+        if p.is_null() {
+            None
+        } else {
+            Some(std::mem::transmute_copy(&p))
+        }
+    }
+
+    fn resolve_lua_api() -> Option<LuaApi> {
+        unsafe {
+            // LuaJIT's symbols might be in lua51.dll (standalone) or in
+            // the host exe (REFramework embeds LuaJIT statically). Try
+            // lua51.dll first, then fall back to the main module (null).
+            let candidates: &[*const c_char] = &[
+                b"lua51.dll\0".as_ptr() as *const c_char,
+                std::ptr::null(),
+            ];
+            for &name in candidates {
+                let module = GetModuleHandleA(name);
+                if module.is_null() {
+                    continue;
+                }
+                let api = (|| -> Option<LuaApi> {
+                    Some(LuaApi {
+                        tonumber: resolve_sym(module, b"lua_tonumber\0")?,
+                        pushnumber: resolve_sym(module, b"lua_pushnumber\0")?,
+                        pushboolean: resolve_sym(module, b"lua_pushboolean\0")?,
+                        pushcclosure: resolve_sym(module, b"lua_pushcclosure\0")?,
+                        setfield: resolve_sym(module, b"lua_setfield\0")?,
+                        pushnil: resolve_sym(module, b"lua_pushnil\0")?,
+                    })
+                })();
+                if api.is_some() {
+                    return api;
+                }
+            }
+            None
+        }
+    }
+
+    fn lua_api() -> Option<&'static LuaApi> {
+        LUA_API.get_or_init(|| resolve_lua_api()).as_ref()
+    }
+
+    /// Helper: register a Lua C function as a global variable.
+    unsafe fn set_global(api: &LuaApi, l: LuaState, name: &[u8], f: LuaCFunction) {
+        (api.pushcclosure)(l, f, 0);
+        (api.setfield)(l, LUA_GLOBALSINDEX, name.as_ptr() as *const c_char);
+    }
+
+    /// Called by REFramework when a new Lua state is created.
+    /// We register our four bridge functions as globals.
+    pub unsafe extern "C" fn register(l: LuaState) {
+        let Some(api) = lua_api() else {
+            log_info(b"[frogma] lua_bridge: could not resolve Lua C API\0");
+            return;
+        };
+
+        set_global(api, l, b"frogma_push_local_state\0", lua_push_local_state);
+        set_global(api, l, b"frogma_peer_count\0", lua_peer_count);
+        set_global(api, l, b"frogma_peer_view\0", lua_peer_view);
+        set_global(api, l, b"frogma_local_peer_id\0", lua_local_peer_id);
+
+        log_info(b"[frogma] lua_bridge: registered 4 globals\0");
+    }
+
+    // -- Lua-callable wrappers -----------------------------------------------
+
+    /// frogma_push_local_state(x, y, z, yaw, hp, hp_max, vocation, pose)
+    unsafe extern "C" fn lua_push_local_state(l: LuaState) -> c_int {
+        let Some(api) = lua_api() else { return 0 };
+        let x = (api.tonumber)(l, 1) as f32;
+        let y = (api.tonumber)(l, 2) as f32;
+        let z = (api.tonumber)(l, 3) as f32;
+        let yaw = (api.tonumber)(l, 4) as f32;
+        let hp = (api.tonumber)(l, 5) as u16;
+        let hp_max = (api.tonumber)(l, 6) as u16;
+        let voc = (api.tonumber)(l, 7) as u8;
+        let pose = (api.tonumber)(l, 8) as u8;
+        frogma_push_local_state(x, y, z, yaw, hp, hp_max, voc, pose);
+        0
+    }
+
+    /// frogma_peer_count() -> number
+    unsafe extern "C" fn lua_peer_count(l: LuaState) -> c_int {
+        let Some(api) = lua_api() else { return 0 };
+        let n = frogma_peer_count();
+        (api.pushnumber)(l, n as f64);
+        1
+    }
+
+    /// frogma_peer_view(idx) -> peer_id, pos_x, pos_y, pos_z, yaw, hp, hp_max, vocation, pose
+    ///                       -> nil on failure
+    unsafe extern "C" fn lua_peer_view(l: LuaState) -> c_int {
+        let Some(api) = lua_api() else { return 0 };
+        let idx = (api.tonumber)(l, 1) as usize;
+        let guard = state().lock().unwrap();
+        let table = match &guard.peer_table {
+            Some(t) => t,
+            None => {
+                (api.pushnil)(l);
+                return 1;
+            }
+        };
+        let snaps = table.snapshot();
+        let Some((_id, s)) = snaps.get(idx) else {
+            drop(guard);
+            (api.pushnil)(l);
+            return 1;
+        };
+        let s = *s; // copy before dropping guard
+        drop(guard);
+        (api.pushnumber)(l, s.peer_id as f64);
+        (api.pushnumber)(l, s.pos[0] as f64);
+        (api.pushnumber)(l, s.pos[1] as f64);
+        (api.pushnumber)(l, s.pos[2] as f64);
+        (api.pushnumber)(l, s.yaw as f64);
+        (api.pushnumber)(l, s.hp as f64);
+        (api.pushnumber)(l, s.hp_max as f64);
+        (api.pushnumber)(l, s.vocation as f64);
+        (api.pushnumber)(l, s.pose as f64);
+        9
+    }
+
+    /// frogma_local_peer_id() -> number
+    unsafe extern "C" fn lua_local_peer_id(l: LuaState) -> c_int {
+        let Some(api) = lua_api() else { return 0 };
+        let id = frogma_local_peer_id();
+        (api.pushnumber)(l, id as f64);
+        1
+    }
 }
 
-/// Push the local player's current state. Called each frame by Lua
-/// after reading DD2's IL2CPP surface. Cheap: one mutex acquisition.
+// On non-Windows, provide a no-op callback so plugin_initialize compiles.
+#[cfg(not(target_os = "windows"))]
+mod lua_bridge {
+    use super::*;
+    pub unsafe extern "C" fn register(_l: *mut c_void) {}
+}
+
+/// The on_lua_state_created callback — dispatches to lua_bridge::register.
+unsafe extern "C" fn on_lua_state_created(l: LuaState) {
+    lua_bridge::register(l);
+}
+
+// ---------- C ABI bridge (still exported for direct use) ----------------
+
+#[repr(C)]
+pub struct FrogmaPeerView {
+    pub peer_id: u64,
+    pub seq: u32,
+    pub _pad0: u32,
+    pub t_send_ms: u64,
+    pub pos_x: f32,
+    pub pos_y: f32,
+    pub pos_z: f32,
+    pub yaw: f32,
+    pub hp: u16,
+    pub hp_max: u16,
+    pub vocation: u8,
+    pub pose: u8,
+    pub _pad1: u16,
+}
+
 #[no_mangle]
 pub extern "C" fn frogma_push_local_state(
-    pos_x: f32,
-    pos_y: f32,
-    pos_z: f32,
-    yaw: f32,
-    hp: u16,
-    hp_max: u16,
-    vocation: u8,
-    pose: u8,
+    pos_x: f32, pos_y: f32, pos_z: f32, yaw: f32,
+    hp: u16, hp_max: u16, vocation: u8, pose: u8,
 ) {
     let local = state().lock().unwrap().local_state.clone();
     *local.lock().unwrap() = LocalState {
         pos: [pos_x, pos_y, pos_z],
-        yaw,
-        hp,
-        hp_max,
-        vocation,
-        pose,
+        yaw, hp, hp_max, vocation, pose,
     };
 }
 
-/// Number of remote peers currently in the peer table.
 #[no_mangle]
 pub extern "C" fn frogma_peer_count() -> usize {
     match &state().lock().unwrap().peer_table {
@@ -292,16 +454,6 @@ pub extern "C" fn frogma_peer_count() -> usize {
     }
 }
 
-/// Copy the `idx`-th peer's latest snapshot into `out`. Returns
-/// `true` on success, `false` if `idx` is out of bounds, `out` is
-/// null, or no peer table is initialised.
-///
-/// The peer order is not stable between calls — it's a hash map
-/// enumeration. Lua should iterate 0..frogma_peer_count() and match
-/// by peer_id if persistent identity matters.
-///
-/// # Safety
-/// `out` must point to a writable `FrogmaPeerView`.
 #[no_mangle]
 pub unsafe extern "C" fn frogma_peer_view(idx: usize, out: *mut FrogmaPeerView) -> bool {
     if out.is_null() {
@@ -317,31 +469,21 @@ pub unsafe extern "C" fn frogma_peer_view(idx: usize, out: *mut FrogmaPeerView) 
         return false;
     };
     *out = FrogmaPeerView {
-        peer_id: s.peer_id,
-        seq: s.seq,
-        _pad0: 0,
+        peer_id: s.peer_id, seq: s.seq, _pad0: 0,
         t_send_ms: s.t_send_ms,
-        pos_x: s.pos[0],
-        pos_y: s.pos[1],
-        pos_z: s.pos[2],
-        yaw: s.yaw,
-        hp: s.hp,
-        hp_max: s.hp_max,
-        vocation: s.vocation,
-        pose: s.pose,
-        _pad1: 0,
+        pos_x: s.pos[0], pos_y: s.pos[1], pos_z: s.pos[2],
+        yaw: s.yaw, hp: s.hp, hp_max: s.hp_max,
+        vocation: s.vocation, pose: s.pose, _pad1: 0,
     };
     true
 }
 
-/// Our own peer_id. Useful for Lua-side self-identification in logs.
 #[no_mangle]
 pub extern "C" fn frogma_local_peer_id() -> u64 {
     state().lock().unwrap().peer_id
 }
 
-// Safety: REFramework owns the pointees for the plugin's lifetime,
-// and we only ever read through them.
+// Safety: REFramework owns the pointees for the plugin's lifetime.
 unsafe impl Send for REFrameworkPluginInitializeParam {}
 unsafe impl Sync for REFrameworkPluginInitializeParam {}
 unsafe impl Send for REFrameworkPluginFunctions {}
@@ -357,21 +499,10 @@ mod tests {
     fn peer_view_layout() {
         assert_eq!(std::mem::size_of::<FrogmaPeerView>(), 48);
         assert_eq!(std::mem::align_of::<FrogmaPeerView>(), 8);
-        // Spot-check offsets (stable C ABI).
         let v = FrogmaPeerView {
-            peer_id: 0,
-            seq: 0,
-            _pad0: 0,
-            t_send_ms: 0,
-            pos_x: 0.0,
-            pos_y: 0.0,
-            pos_z: 0.0,
-            yaw: 0.0,
-            hp: 0,
-            hp_max: 0,
-            vocation: 0,
-            pose: 0,
-            _pad1: 0,
+            peer_id: 0, seq: 0, _pad0: 0, t_send_ms: 0,
+            pos_x: 0.0, pos_y: 0.0, pos_z: 0.0, yaw: 0.0,
+            hp: 0, hp_max: 0, vocation: 0, pose: 0, _pad1: 0,
         };
         let base = &v as *const _ as usize;
         assert_eq!(&v.peer_id as *const _ as usize - base, 0);
@@ -385,7 +516,6 @@ mod tests {
 
     #[test]
     fn push_local_state_updates_shared() {
-        // Peek at the shared state through the exported C function.
         frogma_push_local_state(1.5, 2.5, 3.5, 0.75, 100, 200, 3, 1);
         let s = state().lock().unwrap().local_state.clone();
         let st = *s.lock().unwrap();
@@ -399,18 +529,11 @@ mod tests {
 
     #[test]
     fn peer_count_is_zero_before_init() {
-        // Without a running peer loop, count is 0.
-        // This test may run after push_local_state_updates_shared in
-        // the same process, but peer_table is still None unless
-        // reframework_plugin_initialize was called.
-        let n = frogma_peer_count();
-        assert!(n == 0);
+        assert_eq!(frogma_peer_count(), 0);
     }
 
     #[test]
     fn peer_view_rejects_null_out() {
-        unsafe {
-            assert!(!frogma_peer_view(0, std::ptr::null_mut()));
-        }
+        unsafe { assert!(!frogma_peer_view(0, std::ptr::null_mut())); }
     }
 }

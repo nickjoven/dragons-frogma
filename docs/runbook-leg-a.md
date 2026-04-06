@@ -59,13 +59,12 @@ Same output path.
 
     <Steam>/steamapps/common/Dragon's Dogma 2/
       dinput8.dll                      # REFramework loader, already installed
-      reframework/
+      re2_framework_log.txt                  # <- log lives at DD2 root, not reframework/logs/
+    reframework/
         plugins/
           frogma_plugin.dll            # <- drop here
         autorun/
           frogma.lua                   # <- companion Lua script
-        logs/
-          re2_framework_log.txt        # <- watch this after launch
 
 REFramework must already be installed. If not, get it from
 https://github.com/praydog/REFramework/releases (pick the DD2 build).

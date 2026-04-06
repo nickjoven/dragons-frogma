@@ -4,85 +4,31 @@
 --     <DD2>/reframework/plugins/frogma_plugin.dll
 --     <DD2>/reframework/autorun/frogma.lua   <- this file
 --
--- Responsibilities (MVP scaffold):
---   1. Resolve the plugin DLL via LuaJIT FFI.
---   2. Each frame, push the local player's state into the plugin
---      so the UDP tx thread has something to broadcast.
---   3. Once per second, log peer_count + our own peer_id.
+-- The plugin registers four Lua globals via on_lua_state_created:
+--   frogma_push_local_state(x, y, z, yaw, hp, hp_max, vocation, pose)
+--   frogma_peer_count() -> number
+--   frogma_peer_view(idx) -> peer_id, pos_x, pos_y, pos_z, yaw, hp,
+--                            hp_max, vocation, pose   (or nil)
+--   frogma_local_peer_id() -> number
 --
--- This is a scaffold. IL2CPP reads for the real player position live
--- in Leg C; until then we push zeros so the pipe is exercised end to
--- end without depending on the DD2 surface being mapped.
---
--- Known limitation: REFramework's Lua is LuaJIT, so `ffi` is
--- available in most builds. If `ffi` is absent in your build, this
--- script logs once and exits — the plugin DLL still runs the UDP
--- loop, it's just invisible from Lua until Leg B wires the proper
--- on_lua_state_created binding path.
+-- No ffi required — the plugin resolves Lua C API symbols at runtime
+-- and pushes these as globals before autorun scripts execute.
 
-local ok_ffi, ffi = pcall(require, "ffi")
-if not ok_ffi then
-    log.warn("[frogma] ffi unavailable — plugin runs headless")
+-- Guard: if plugin didn't load (version mismatch, crash, etc.), the
+-- globals won't exist.
+if type(frogma_peer_count) ~= "function" then
+    log.error("[frogma] plugin globals missing — is frogma_plugin.dll loaded?")
     return
 end
 
--- C signatures must match frogma-plugin/src/lib.rs exports.
-ffi.cdef [[
-    typedef struct {
-        uint64_t peer_id;
-        uint32_t seq;
-        uint32_t _pad0;
-        uint64_t t_send_ms;
-        float    pos_x;
-        float    pos_y;
-        float    pos_z;
-        float    yaw;
-        uint16_t hp;
-        uint16_t hp_max;
-        uint8_t  vocation;
-        uint8_t  pose;
-        uint16_t _pad1;
-    } FrogmaPeerView;
-
-    void     frogma_push_local_state(
-                float x, float y, float z, float yaw,
-                uint16_t hp, uint16_t hp_max,
-                uint8_t vocation, uint8_t pose);
-    size_t   frogma_peer_count(void);
-    bool     frogma_peer_view(size_t idx, FrogmaPeerView* out);
-    uint64_t frogma_local_peer_id(void);
-]]
-
--- The plugin DLL is already loaded by REFramework, so its symbols
--- live in the host process. Passing nil / empty name to ffi.load
--- resolves against the current process on Windows.
-local ok_lib, lib = pcall(function()
-    -- Try by module name first (REFramework's DLL list), then fall
-    -- back to the host process symbol table.
-    local candidates = { "frogma_plugin", "" }
-    for _, name in ipairs(candidates) do
-        local ok, l = pcall(ffi.load, name)
-        if ok then return l end
-    end
-    error("could not resolve frogma_plugin exports")
-end)
-
-if not ok_lib then
-    log.error("[frogma] " .. tostring(lib))
-    return
-end
-
-local peer_id = lib.frogma_local_peer_id()
-log.info(string.format("[frogma] lua bound to plugin — local peer_id=%s",
-    tostring(peer_id)))
+local peer_id = frogma_local_peer_id()
+log.info(string.format("[frogma] lua bound — local peer_id=%.0f", peer_id))
 
 -- ----------------------------------------------------------------------
 -- Leg C: DD2 IL2CPP surface for local player position.
 -- Path per finding f.dd2-player-pos-path-mar2026 (MyDD2Mod Feb-Mar 2026).
 -- ----------------------------------------------------------------------
 
--- Surface check at load time. If types/methods have shifted, we log
--- loudly once and fall back to zero-push so the plugin still runs.
 local function surface_check()
     local td = sdk.find_type_definition("app.CharacterManager")
     if not td then return false, "app.CharacterManager type missing" end
@@ -140,7 +86,6 @@ local function resolve_player_pose()
     local yaw = 0.0
     if rot then
         -- Quaternion to yaw (Y-axis rotation, RE Engine Y-up).
-        -- yaw = atan2(2(wy + xz), 1 - 2(y^2 + z^2))
         local x, y, z, w = rot.x, rot.y, rot.z, rot.w
         yaw = math.atan(2 * (w * y + x * z), 1 - 2 * (y * y + z * z))
     end
@@ -155,7 +100,6 @@ end
 
 -- Heartbeat timing.
 local last_log = os.clock()
-local view = ffi.new("FrogmaPeerView")
 
 re.on_frame(function()
     if surface_ok then
@@ -169,7 +113,7 @@ re.on_frame(function()
         end
     end
 
-    lib.frogma_push_local_state(
+    frogma_push_local_state(
         cached.x, cached.y, cached.z,
         cached.yaw,
         1, 1,             -- hp, hp_max: Leg C+1 reads these from DD2
@@ -179,7 +123,7 @@ re.on_frame(function()
     local now = os.clock()
     if now - last_log >= 1.0 then
         last_log = now
-        local count = tonumber(lib.frogma_peer_count())
+        local count = frogma_peer_count()
         local staleness = cached.stale and " (stale)" or ""
         log.info(string.format(
             "[frogma] peers=%d  self=(%.2f,%.2f,%.2f) yaw=%.2f%s",
@@ -187,11 +131,11 @@ re.on_frame(function()
 
         -- Dump each peer once/sec for visibility during the spike.
         for i = 0, count - 1 do
-            if lib.frogma_peer_view(i, view) then
+            local pid, px, py, pz, pyaw = frogma_peer_view(i)
+            if pid then
                 log.info(string.format(
-                    "[frogma]   peer[%d]=%s pos=(%.2f,%.2f,%.2f) yaw=%.2f",
-                    i, tostring(view.peer_id),
-                    view.pos_x, view.pos_y, view.pos_z, view.yaw))
+                    "[frogma]   peer[%d]=%.0f pos=(%.2f,%.2f,%.2f) yaw=%.2f",
+                    i, pid, px, py, pz, pyaw))
             end
         end
     end
