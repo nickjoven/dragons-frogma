@@ -14,16 +14,12 @@ local LOCAL_PATH  = "reframework/frogma_local.txt"
 local PEERS_PATH  = "reframework/frogma_peers.txt"
 local PEERID_PATH = "reframework/frogma_peer_id.txt"
 
--- Read our peer_id (written once by the plugin at init).
+-- peer_id is read lazily on the first on_frame tick where the file exists,
+-- avoiding a race with plugin_initialize which writes the file at ~the same
+-- time as Lua autorun scripts execute.
 local peer_id = 0
-local f = io.open(PEERID_PATH, "r")
-if f then
-    peer_id = tonumber(f:read("*l")) or 0
-    f:close()
-    log.info(string.format("[frogma] lua bound — local peer_id=%.0f (file IPC)", peer_id))
-else
-    log.warn("[frogma] peer_id file not found — plugin may not have loaded")
-end
+local peer_id_resolved = false
+local peer_id_tick = 0
 
 -- ----------------------------------------------------------------------
 -- Leg C: DD2 IL2CPP surface for local player position.
@@ -118,6 +114,21 @@ end
 local last_log = os.clock()
 
 re.on_frame(function()
+    -- Lazy peer_id read: retry each frame until the plugin has written the file.
+    if not peer_id_resolved then
+        peer_id_tick = peer_id_tick + 1
+        local f = io.open(PEERID_PATH, "r")
+        if f then
+            peer_id = tonumber(f:read("*l")) or 0
+            f:close()
+            peer_id_resolved = true
+            log.info(string.format("[frogma] lua bound — local peer_id=%.0f (file IPC, tick %d)", peer_id, peer_id_tick))
+        elseif peer_id_tick >= 60 then
+            peer_id_resolved = true  -- stop retrying
+            log.warn("[frogma] peer_id file not found after 60 ticks — plugin may not have loaded")
+        end
+    end
+
     -- Resolve local player pose and write to file for the plugin.
     if surface_ok then
         local pose = resolve_player_pose()
@@ -141,6 +152,22 @@ re.on_frame(function()
 
     -- Read peer snapshots from the plugin.
     local peers = read_peers()
+
+    -- ----------------------------------------------------------------------
+    -- Leg D: Draw ghost markers for remote peers via draw.world_to_screen.
+    -- Q-0003: does the draw hook fire on a safe thread? We find out here.
+    -- ----------------------------------------------------------------------
+    for _, p in ipairs(peers) do
+        local world_pos = Vector3f.new(p.x, p.y, p.z)
+        local screen = draw.world_to_screen(world_pos)
+        if screen then
+            local sx, sy = screen.x, screen.y
+            -- Ghost marker: colored dot + peer_id label.
+            -- Teal: 0xFF40E0D0 (ARGB)
+            draw.filled_circle(sx, sy, 8, 0xFF40E0D0, 12)
+            draw.text(string.format("%.0f", p.peer_id), sx + 12, sy - 8, 0xFFFFFFFF)
+        end
+    end
 
     local now = os.clock()
     if now - last_log >= 1.0 then
