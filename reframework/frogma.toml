@@ -1,0 +1,14 @@
+# frogma — peer overlay config
+#
+# bind: local UDP address to listen on (default: 0.0.0.0:45100)
+# peers: list of friend IPs to broadcast your position to
+#
+# All peers must be on the same Tailscale/ZeroTier overlay or LAN.
+# Each friend needs this mod installed and their own frogma.toml
+# pointing back at you.
+
+bind = "0.0.0.0:45100"
+
+# Uncomment and edit with your friends' Tailscale IPs:
+# peers = ["100.64.0.2:45100", "100.64.0.3:45100"]
+peers = []

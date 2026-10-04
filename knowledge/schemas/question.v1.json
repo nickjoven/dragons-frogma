@@ -1,0 +1,12 @@
+{
+  "$id": "dragons-frogma/question.v1",
+  "name": "question",
+  "version": 1,
+  "fields": [
+    { "name": "id",        "type": "string", "required": true, "identity": true },
+    { "name": "title",     "type": "string", "required": true },
+    { "name": "status",    "type": "string", "required": true, "enum": ["open", "partial", "answered", "stale"] },
+    { "name": "why",       "type": "string", "required": true },
+    { "name": "opened_at", "type": "string", "required": true }
+  ]
+}

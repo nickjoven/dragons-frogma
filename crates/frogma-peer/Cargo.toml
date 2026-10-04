@@ -1,0 +1,10 @@
+[package]
+name = "frogma-peer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+frogma-wire = { workspace = true }
+
+[lib]

@@ -1,0 +1,13 @@
+[package]
+name = "frogma-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "frogma-harness"
+path = "src/main.rs"
+
+[dependencies]
+frogma-wire = { workspace = true }
+frogma-peer = { workspace = true }

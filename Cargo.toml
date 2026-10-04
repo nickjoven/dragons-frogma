@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/frogma-wire",
+    "crates/frogma-peer",
+    "crates/frogma-harness",
+    "crates/frogma-plugin",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+frogma-wire = { path = "crates/frogma-wire" }
+frogma-peer = { path = "crates/frogma-peer" }

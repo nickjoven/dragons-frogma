@@ -1,0 +1,3 @@
+[submodule "k-stack"]
+	path = k-stack
+	url = https://github.com/nickjoven/k-stack.git

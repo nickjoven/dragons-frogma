@@ -1,0 +1,13 @@
+{
+  "$id": "dragons-frogma/finding.v1",
+  "name": "finding",
+  "version": 1,
+  "fields": [
+    { "name": "id",          "type": "string",   "required": true, "identity": true },
+    { "name": "claim",       "type": "string",   "required": true },
+    { "name": "evidence",    "type": "string",   "required": true },
+    { "name": "sources",     "type": "string[]", "required": false },
+    { "name": "confidence",  "type": "string",   "required": true, "enum": ["low", "medium", "high", "verified"] },
+    { "name": "accessed_at", "type": "string",   "required": true }
+  ]
+}
